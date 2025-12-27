@@ -1,0 +1,18 @@
+<div class="space-y-2">
+  <canvas #c class="w-full h-auto touch-none rounded-xl border border-neutral-700 bg-neutral-950"></canvas>
+
+  <div class="flex gap-2">
+    <button type="button" class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900" (click)="reset()">
+      Reset
+    </button>
+
+    <button type="button"
+      class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50 disabled:hover:bg-transparent"
+      [disabled]="!isReady()" (click)="emitQuad()">
+      Use quad
+    </button>
+
+    <div class="ml-auto text-sm text-neutral-400 self-center" [textContent]="pts().length + '/4 points'">
+    </div>
+  </div>
+</div>

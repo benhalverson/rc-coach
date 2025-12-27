@@ -11,5 +11,4 @@ export const reqHandler = createRequestHandler(async (req) => {
 	return res ?? new Response('Page not found.', { status: 404 });
 });
 
-
 export default { fetch: reqHandler };

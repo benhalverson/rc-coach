@@ -1,0 +1,110 @@
+<div class="mx-auto max-w-5xl p-4 space-y-4">
+  <div class="flex items-center gap-3">
+    <h1 class="text-xl font-semibold">Track Editor</h1>
+    <div class="text-sm text-neutral-400">Step: {{ step() }}</div>
+    <div class="ml-auto flex gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900" (click)="resetAll()">Reset
+        all</button>
+    </div>
+  </div>
+
+  <!-- UPLOAD -->
+  <section *ngIf="step()==='upload'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
+    <div class="text-neutral-300">Upload your track screenshot.</div>
+    <input type="file" accept="image/*" (change)="onFile($event)" />
+  </section>
+
+  <!-- QUAD PICK -->
+  <section *ngIf="step()==='quad'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
+    <div class="text-neutral-300">
+      Click 4 points for the floor plane: <span class="font-semibold">TL → TR → BR → BL</span>.
+      (You can drag to adjust.)
+    </div>
+
+    <!-- Replace with your modern quad picker -->
+    <app-quad-picker *ngIf="srcImage()" [image]="srcImage()!" (quad)="onQuad($event)"></app-quad-picker>
+
+    <div class="flex gap-2 pt-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="step.set('upload')">Back</button>
+    </div>
+  </section>
+
+  <!-- SCALE -->
+  <section *ngIf="step()==='scale'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
+    <div class="text-neutral-300">Top-down created. Define real size (meters).</div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <label class="space-y-1">
+        <div class="text-sm text-neutral-400">Track name</div>
+        <input class="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2" [value]="name()"
+          (input)="name.set(($any($event.target)).value)" />
+      </label>
+
+      <label class="space-y-1">
+        <div class="text-sm text-neutral-400">Plane width (m)</div>
+        <input type="number" step="0.01" class="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2"
+          [value]="widthMeters()"
+          (input)="widthMeters.set(1)"
+           />
+      </label>
+
+      <label class="space-y-1">
+        <div class="text-sm text-neutral-400">Plane height (m)</div>
+        <input type="number" step="0.01" class="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2"
+          [value]="heightMeters()" (input)="heightMeters.set(1)" />
+      </label>
+    </div>
+
+    <div class="rounded-xl border border-neutral-800 p-2">
+      <canvas *ngIf="topDown()" [attr.width]="topDown()!.width" [attr.height]="topDown()!.height"
+        class="w-full h-auto rounded-lg border border-neutral-800"></canvas>
+      <div *ngIf="!topDown()" class="text-neutral-500">No topdown yet.</div>
+    </div>
+
+    <div class="flex gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="step.set('quad')">Back</button>
+
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50"
+        [disabled]="!canGoAnnotate()" (click)="step.set('annotate')">Next: annotate</button>
+    </div>
+  </section>
+
+  <!-- ANNOTATE -->
+  <section *ngIf="step()==='annotate'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
+    <div class="text-neutral-300">Draw zones: jumps and wall rides.</div>
+
+    <!-- <app-topdown-annotator *ngIf="topDown()" [topdown]="topDown()!" [zonesIn]="zones()" (zonesOut)="zones.set($event)">
+    </app-topdown-annotator> -->
+
+    <div class="flex gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="step.set('scale')">Back</button>
+
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="step.set('export')">Next: export</button>
+    </div>
+  </section>
+
+  <!-- EXPORT -->
+  <section *ngIf="step()==='export'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
+    <div class="text-neutral-300">Export your track definition.</div>
+
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="downloadTopdownPng()">Download topdown.png</button>
+
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50"
+        [disabled]="!trackDef()" (click)="downloadTrackJson()">Download track.json</button>
+    </div>
+
+    <pre class="overflow-auto rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300"
+      *ngIf="trackDef() as t">{{ t | json }}</pre>
+
+    <div class="flex gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="step.set('annotate')">Back</button>
+    </div>
+  </section>
+</div>
