@@ -1,59 +1,74 @@
-# RcCoach
+# RC Racing Digital Twin — Track Editor
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.0.1.
+A lightweight, **browser-first track editor** for building a 2D “digital twin” of competitive RC racing tracks.
 
-## Development server
+This project turns a track screenshot (photo/screenshot of the layout) into a **rectified top-down map** you can **scale to real-world dimensions** and **annotate with track features** like jumps and wall rides. The output is a portable `track.json` + `topdown.png` that can later plug into simulation, setup optimization, analytics, or ghost/replay tooling.
 
-To start a local development server, run:
+Built with **Angular 21 + Signals** and designed to run well on **Cloudflare** (static app + optional Worker/R2/D1 storage).
 
-```bash
-ng serve
-```
+---
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## Why this exists
 
-## Code scaffolding
+Competitive RC setup tuning is hard because feedback is subjective (“it feels pushy”). A digital twin starts with a trustworthy track model. This editor is the first milestone: **get the track into a clean, scaled coordinate system** and capture key features that matter for driving and setup (jumps, wall rides, etc.).
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+---
 
-```bash
-ng generate component component-name
-```
+## Core features
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+### 1) Screenshot → True Top-Down Rectification
+- Upload a track screenshot
+- Select a 4-point quad (TL/TR/BR/BL) that represents the floor plane
+- Warp the image into a **top-down orthographic map** using perspective transform
 
-```bash
-ng generate --help
-```
+### 2) Real-World Scaling
+- Define the physical size of the rectified plane (meters / feet)
+- Track coordinates are stored normalized (0..1) so scaling is consistent and future-proof
 
-## Building
+### 3) Feature Annotation (Zones)
+- Draw zones directly on the top-down map:
+  - **Jump** zones
+  - **Wall ride** zones
+- Zones are saved as polygons (rectangles for v1, extensible to arbitrary polygons later)
 
-To build the project run:
+### 4) Portable Export Format
+- Export:
+  - `topdown.png` (rectified image)
+  - `track.json` (scale + annotation metadata)
+- Output is designed to be consumed by later tools:
+  - physics sim / setup sweeps
+  - racing line analysis
+  - ghost laps / replays
 
-```bash
-ng build
-```
+---
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+## Output files
 
-## Running unit tests
+### `topdown.png`
+Rectified, top-down version of the imported screenshot.
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+### `track.json`
+Contains:
+- track name + id
+- real-world dimensions (`widthMeters`, `heightMeters`)
+- top-down image pixel size
+- annotations (`zones`)
+- import metadata (source image name + quad points for reproducibility)
 
-```bash
-ng test
-```
+---
 
-## Running end-to-end tests
+## Tech stack
 
-For end-to-end (e2e) testing, run:
+- **Angular 21** (standalone components + Signals)
+- **OpenCV.js** (warpPerspective / perspective transform)
+- **Cloudflare-ready** deployment (Pages + optional Worker integrations)
 
-```bash
-ng e2e
-```
+---
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+## Roadmap
 
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+- Track centerline editor (polyline + smoothing)
+- Polygon / bezier zone tools + snapping
+- Measure tool (click two points → known distance calibration)
+- Cloudflare Worker endpoints to persist tracks to **R2** (images) + **D1** (index/metadata)
+- Simulation/optimization layer (setup sweep coach) using this track twin as input
