@@ -1,8 +1,8 @@
 import {
+	afterNextRender,
 	ChangeDetectionStrategy,
 	Component,
 	ElementRef,
-	afterNextRender,
 	effect,
 	Injector,
 	inject,
@@ -28,7 +28,8 @@ export class CenterlineEditor {
 	readonly lineIn = input<Vec2[]>([]);
 	readonly lineOut = output<Vec2[]>();
 
-	private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
+	private readonly canvasRef =
+		viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
 	private readonly pts = signal<Pt[]>([]);
 	private readonly draggingIdx = signal<number | null>(null);
 	private readonly injector = inject(Injector);
@@ -97,7 +98,9 @@ export class CenterlineEditor {
 		const top = this.topdown();
 		if (!top) return;
 		const src = this.lineIn();
-		this.pts.set(src.map(([x, y]) => ({ x: x * top.width, y: y * top.height })));
+		this.pts.set(
+			src.map(([x, y]) => ({ x: x * top.width, y: y * top.height })),
+		);
 	}
 
 	private emitLine() {

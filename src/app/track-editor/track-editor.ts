@@ -1,15 +1,28 @@
 import { CommonModule, JsonPipe } from '@angular/common';
-import { Component, computed, effect, inject, signal, viewChild } from '@angular/core';
+import {
+	Component,
+	computed,
+	effect,
+	inject,
+	signal,
+	viewChild,
+} from '@angular/core';
+import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { orderQuadTLTRBRBL, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import { QuadPicker } from '../quad-picker/quad-picker';
 import { TopdownAnnotator } from '../topdown-annotator/topdown-annotator';
-import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import type { TrackDef, Vec2, Zone, ZoneType } from '../track-types';
 
 @Component({
 	selector: 'app-track-editor',
-	imports: [JsonPipe, QuadPicker, CommonModule, TopdownAnnotator, CenterlineEditor],
+	imports: [
+		JsonPipe,
+		QuadPicker,
+		CommonModule,
+		TopdownAnnotator,
+		CenterlineEditor,
+	],
 	templateUrl: './track-editor.html',
 	styleUrl: './track-editor.css',
 })
@@ -79,6 +92,20 @@ export class TrackEditor {
 		});
 	}
 
+	// Import session support
+	readonly importTopdownImg = signal<HTMLImageElement | null>(null);
+	readonly importTrack = signal<TrackDef | null>(null);
+	readonly canImport = computed(
+		() => !!this.importTopdownImg() && !!this.importTrack(),
+	);
+	readonly pixelsPerMeterAuto = computed(() => {
+		const t = this.importTrack();
+		if (!t) return null;
+		const ppmX = t.topdownPx.w / t.widthMeters;
+		const ppmY = t.topdownPx.h / t.heightMeters;
+		return (ppmX + ppmY) / 2;
+	});
+
 	readonly canGoAnnotate = computed(
 		() =>
 			!!this.topDown() &&
@@ -107,6 +134,37 @@ export class TrackEditor {
 			},
 		};
 	});
+
+	readonly exportErrors = computed(() => {
+		const errors: string[] = [];
+		const t = this.trackDef();
+		if (!t) {
+			errors.push('Top-down image or quad selection missing.');
+			return errors;
+		}
+
+		if (!t.name || t.name.trim().length === 0) {
+			errors.push('Track name is required.');
+		}
+		if (t.widthMeters <= 0 || t.heightMeters <= 0) {
+			errors.push('Track dimensions must be greater than 0.');
+		}
+
+		if (!t.zones || t.zones.length === 0) {
+			errors.push('At least one zone is required.');
+		} else {
+			for (const z of t.zones) {
+				if (!z.poly || z.poly.length < 3) {
+					errors.push(`Zone ${z.id} (${z.type}) must have at least 3 points.`);
+				}
+			}
+		}
+
+		// Centerline is optional; no strict validation here.
+		return errors;
+	});
+
+	readonly exportValid = computed(() => this.exportErrors().length === 0);
 
 	async onFile(ev: Event) {
 		const input = ev.target as HTMLInputElement;
@@ -279,7 +337,7 @@ export class TrackEditor {
 
 	downloadTrackJson() {
 		const t = this.trackDef();
-		if (!t) return;
+		if (!t || !this.exportValid()) return;
 
 		const blob = new Blob([JSON.stringify(t, null, 2)], {
 			type: 'application/json',
@@ -309,6 +367,76 @@ export class TrackEditor {
 	onCenterlineChange(line: Vec2[]) {
 		this.centerline.set(line);
 	}
+
+	onImportTopdownFile(ev: Event) {
+		const input = ev.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		const url = URL.createObjectURL(file);
+		const img = new Image();
+		img.onload = () => {
+			URL.revokeObjectURL(url);
+			this.importTopdownImg.set(img);
+		};
+		img.src = url;
+	}
+
+	onImportTrackJsonFile(ev: Event) {
+		const input = ev.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		const reader = new FileReader();
+		reader.onload = () => {
+			try {
+				const raw = reader.result as string;
+				const json = JSON.parse(raw) as TrackDef;
+				// minimal validation
+				if (
+					!json ||
+					!json.topdownPx ||
+					!json.widthMeters ||
+					!json.heightMeters
+				) {
+					console.warn('Invalid track.json');
+					return;
+				}
+				this.importTrack.set(json);
+			} catch (e) {
+				console.error('Failed to parse track.json', e);
+			}
+		};
+		reader.readAsText(file);
+	}
+
+	applyImport() {
+		const img = this.importTopdownImg();
+		const t = this.importTrack();
+		if (!img || !t) return;
+
+		// Set editor state from track.json
+		this.name.set(t.name);
+		this.widthMeters.set(t.widthMeters);
+		this.heightMeters.set(t.heightMeters);
+		this.zones.set(t.zones ?? []);
+		this.centerline.set(t.centerline ?? []);
+		this.srcImageName.set(t.import?.srcImageName ?? this.srcImageName());
+		this.quadPx.set(t.import?.srcQuadPx ?? null);
+
+		// Create canvas from imported topdown image with expected dimensions
+		const c = document.createElement('canvas');
+		c.width = t.topdownPx.w;
+		c.height = t.topdownPx.h;
+		const ctx = c.getContext('2d');
+		if (ctx) ctx.drawImage(img, 0, 0, c.width, c.height);
+		this.topDown.set(c);
+		this.topDownW.set(c.width);
+		this.topDownH.set(c.height);
+
+		// Clear import buffers and jump to annotate
+		this.importTopdownImg.set(null);
+		this.importTrack.set(null);
+		this.step.set('annotate');
+	}
 }
 type Step =
 	| 'scale'
@@ -317,4 +445,4 @@ type Step =
 	| 'annotate'
 	| 'export'
 	| 'centerline'
-	| 'viewer'
+	| 'viewer';

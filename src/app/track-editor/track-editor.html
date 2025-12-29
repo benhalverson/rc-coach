@@ -12,6 +12,33 @@
   <section *ngIf="step()==='upload'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
     <div class="text-neutral-500">Upload your track screenshot.</div>
     <input type="file" accept="image/*" (change)="onFile($event)" />
+
+    <div class="mt-4 rounded-xl border border-neutral-800 p-3 space-y-2">
+      <div class="text-neutral-400 text-sm">Or import an existing session (topdown.png + track.json)</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <label class="space-y-1">
+          <div class="text-xs text-neutral-500">Top-down image (PNG)</div>
+          <input type="file" accept="image/png" (change)="onImportTopdownFile($event)" />
+        </label>
+        <label class="space-y-1">
+          <div class="text-xs text-neutral-500">Track definition (JSON)</div>
+          <input type="file" accept="application/json" (change)="onImportTrackJsonFile($event)" />
+        </label>
+      </div>
+
+      <div class="text-xs text-neutral-400" *ngIf="importTrack() as t">
+        Loaded track: <span class="text-neutral-200">{{ t.name }}</span>
+        • topdown: {{ t.topdownPx.w }}×{{ t.topdownPx.h }}px
+        • plane: {{ t.widthMeters.toFixed(2) }}m × {{ t.heightMeters.toFixed(2) }}m
+        <span *ngIf="pixelsPerMeterAuto() as ppm">• ~{{ ppm.toFixed(1) }} px/m</span>
+      </div>
+
+      <button type="button"
+        class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 disabled:opacity-50"
+        [disabled]="!canImport()" (click)="applyImport()">
+        Import session
+      </button>
+    </div>
   </section>
 
   <!-- QUAD PICK -->
@@ -224,15 +251,23 @@
   <section *ngIf="step()==='export'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
     <div class="text-neutral-500">Export your track definition.</div>
 
+    <div *ngIf="exportErrors().length" role="alert" aria-live="polite"
+      class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-neutral-100">
+      <div class="font-semibold mb-1 text-red-300">Fix these before export:</div>
+      <ul class="list-disc pl-5">
+        <li *ngFor="let err of exportErrors()">{{ err }}</li>
+      </ul>
+    </div>
+
     <div class="flex flex-wrap gap-2">
       <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
         (click)="downloadTopdownPng()">Download topdown.png</button>
 
       <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50"
-        [disabled]="!trackDef()" (click)="downloadTrackJson()">Download track.json</button>
+        [disabled]="!exportValid()" (click)="downloadTrackJson()">Download track.json</button>
 
       <button class="rounded-lg border border-cyan-700 px-3 py-2 text-cyan-200 hover:bg-cyan-950 disabled:opacity-50"
-        [disabled]="!trackDef()" (click)="step.set('viewer')">Open viewer (no reupload)</button>
+        [disabled]="!exportValid()" (click)="step.set('viewer')">Open viewer (no reupload)</button>
     </div>
 
     <pre class="overflow-auto rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300"

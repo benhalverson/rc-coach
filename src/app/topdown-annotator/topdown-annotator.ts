@@ -13,6 +13,7 @@ import {
 	viewChild,
 } from '@angular/core';
 import { type Pt, pxToNorm, rectPolyPx } from '../geometry/geometry';
+import { queryZonesAtPoint } from '../geometry/zone-query';
 import type { Zone, ZoneType } from '../track-types';
 
 @Component({
@@ -170,35 +171,12 @@ export class TopdownAnnotator {
 	}
 
 	private findZoneAtPoint(pt: Pt): Zone | null {
-		const { width, height } = this.canvasRef().nativeElement;
-		const zones = this.zones();
-		// Check zones in reverse order (most recent first)
-		for (let i = zones.length - 1; i >= 0; i--) {
-			const z = zones[i];
-			const polyPx = z.poly.map((p) => ({
-				x: p[0] * width,
-				y: p[1] * height,
-			}));
-			if (this.pointInPolygon(pt, polyPx)) {
-				return z;
-			}
-		}
-		return null;
-	}
+		const canvas = this.canvasRef().nativeElement;
+		if (canvas.width === 0 || canvas.height === 0) return null;
 
-	private pointInPolygon(pt: Pt, poly: Pt[]): boolean {
-		let inside = false;
-		for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-			const xi = poly[i].x;
-			const yi = poly[i].y;
-			const xj = poly[j].x;
-			const yj = poly[j].y;
-			const intersect =
-				yi > pt.y !== yj > pt.y &&
-				pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi;
-			if (intersect) inside = !inside;
-		}
-		return inside;
+		const norm = pxToNorm(pt, canvas.width, canvas.height);
+		const { containing } = queryZonesAtPoint(norm, this.zones());
+		return containing.at(-1) ?? null;
 	}
 
 	private pointerToCanvas(ev: PointerEvent): Pt | null {
