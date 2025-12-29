@@ -73,7 +73,7 @@
 		<!-- Undo button -->
 		<div class="flex items-center gap-2 text-sm">
 			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100 disabled:opacity-50"
-				[disabled]="zones().length === 0" (click)="undoLast()">
+				[disabled]="zonesIn().length === 0" (click)="undoLast()">
 				Undo last zone
 			</button>
 		</div>
@@ -84,7 +84,7 @@
 			(pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)"
 			(pointercancel)="onPointerUp($event)"></canvas>
 		<div class="absolute right-3 top-2 rounded bg-neutral-900/90 px-2 py-1 text-xs text-neutral-100">
-			Zones: {{ zones().length }}
+			Zones: {{ zonesIn().length }}
 		</div>
 	</div>
 

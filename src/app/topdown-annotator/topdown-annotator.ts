@@ -31,7 +31,6 @@ export class TopdownAnnotator {
 	private readonly canvasRef =
 		viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
 
-	readonly zones = signal<Zone[]>([]);
 	readonly currentType = signal<ZoneType>('jump');
 	readonly drawMode = signal<'rect' | 'polygon'>('rect');
 	readonly selectedZoneId = signal<string | null>(null);
@@ -45,10 +44,9 @@ export class TopdownAnnotator {
 			// Bind reactive redraws only after the canvas ViewChild exists.
 			runInInjectionContext(this.injector, () => {
 				effect(() => {
-					this.zones.set(this.zonesIn());
 					this.topdown();
 					this.preview();
-					this.zones();
+					this.zonesIn();
 					this.selectedZoneId();
 					this.polygonPoints();
 					this.redraw();
@@ -115,19 +113,15 @@ export class TopdownAnnotator {
 
 		const { width, height } = this.canvasRef().nativeElement;
 		const normPoly = poly.map((p) => pxToNorm(p, width, height));
-		const next: Zone = {
-			id: crypto.randomUUID(),
-			type: this.currentType(),
-			poly: normPoly,
-		};
-		this.zones.update((zs) => [...zs, next]);
-		this.zonesOut.emit(this.zones());
+		const next: Zone = { id: crypto.randomUUID(), type: this.currentType(), poly: normPoly };
+		const updated = [...this.zonesIn(), next];
+		this.zonesOut.emit(updated);
 		this.preview.set(null);
 	}
 
 	undoLast() {
-		this.zones.update((zs) => zs.slice(0, -1));
-		this.zonesOut.emit(this.zones());
+		const updated = this.zonesIn().slice(0, -1);
+		this.zonesOut.emit(updated);
 		this.redraw();
 	}
 
@@ -137,13 +131,9 @@ export class TopdownAnnotator {
 
 		const { width, height } = this.canvasRef().nativeElement;
 		const normPoly = pts.map((p) => pxToNorm(p, width, height));
-		const next: Zone = {
-			id: crypto.randomUUID(),
-			type: this.currentType(),
-			poly: normPoly,
-		};
-		this.zones.update((zs) => [...zs, next]);
-		this.zonesOut.emit(this.zones());
+		const next: Zone = { id: crypto.randomUUID(), type: this.currentType(), poly: normPoly };
+		const updated = [...this.zonesIn(), next];
+		this.zonesOut.emit(updated);
 		this.polygonPoints.set([]);
 		this.preview.set(null);
 	}
@@ -156,18 +146,16 @@ export class TopdownAnnotator {
 	deleteSelected() {
 		const id = this.selectedZoneId();
 		if (!id) return;
-		this.zones.update((zs) => zs.filter((z) => z.id !== id));
-		this.zonesOut.emit(this.zones());
+		const updated = this.zonesIn().filter((z) => z.id !== id);
+		this.zonesOut.emit(updated);
 		this.selectedZoneId.set(null);
 	}
 
 	changeSelectedType(newType: ZoneType) {
 		const id = this.selectedZoneId();
 		if (!id) return;
-		this.zones.update((zs) =>
-			zs.map((z) => (z.id === id ? { ...z, type: newType } : z)),
-		);
-		this.zonesOut.emit(this.zones());
+		const updated = this.zonesIn().map((z) => (z.id === id ? { ...z, type: newType } : z));
+		this.zonesOut.emit(updated);
 	}
 
 	private findZoneAtPoint(pt: Pt): Zone | null {
@@ -175,7 +163,7 @@ export class TopdownAnnotator {
 		if (canvas.width === 0 || canvas.height === 0) return null;
 
 		const norm = pxToNorm(pt, canvas.width, canvas.height);
-		const { containing } = queryZonesAtPoint(norm, this.zones());
+		const { containing } = queryZonesAtPoint(norm, this.zonesIn());
 		return containing.at(-1) ?? null;
 	}
 
@@ -203,7 +191,7 @@ export class TopdownAnnotator {
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		ctx.drawImage(top, 0, 0, top.width, top.height);
 
-		const zones = this.zones();
+		const zones = this.zonesIn();
 		const selectedId = this.selectedZoneId();
 		for (const z of zones) {
 			const isSelected = z.id === selectedId;

@@ -8,7 +8,7 @@
 
     <button type="button"
       class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50 disabled:hover:bg-transparent"
-      [disabled]="!isReady()" (click)="emitQuad()">
+      [disabled]="pts().length !== 4" (click)="emitQuad()">
       Use quad
     </button>
 

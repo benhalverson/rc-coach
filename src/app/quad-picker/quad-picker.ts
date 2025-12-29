@@ -3,7 +3,6 @@ import {
 	afterNextRender,
 	ChangeDetectionStrategy,
 	Component,
-	computed,
 	DestroyRef,
 	effect,
 	inject,
@@ -34,7 +33,6 @@ export class QuadPicker {
 	private readonly draggingIndex = signal<number | null>(null);
 
 	readonly pts = signal<Pt[]>([]);
-	readonly isReady = computed(() => this.pts().length === 4);
 
 	constructor() {
 		effect(() => {
@@ -54,7 +52,6 @@ export class QuadPicker {
 
 	emitQuad() {
 		const pts = this.pts();
-		console.log('emitQuad pts', pts);
 		if (pts.length !== 4) return;
 		this.quad.emit(pts);
 	}
