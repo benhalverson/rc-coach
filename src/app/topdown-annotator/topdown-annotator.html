@@ -1,1 +1,33 @@
-<p>topdown-annotator works!</p>
+<div class="annotator space-y-3">
+	<div class="flex items-center gap-2 text-sm text-neutral-500">
+		<span class="text-neutral-500">Zone type</span>
+		<label class="inline-flex items-center gap-1">
+			<input type="radio" name="zone-type" value="jump" [checked]="currentType() === 'jump'"
+				(change)="currentType.set('jump')" />
+			Jump
+		</label>
+		<label class="inline-flex items-center gap-1">
+			<input type="radio" name="zone-type" value="wallride" [checked]="currentType() === 'wallride'"
+				(change)="currentType.set('wallride')" />
+			Wall ride
+		</label>
+
+		<button type="button" class="ml-auto rounded border border-neutral-700 px-3 py-1 text-xs hover:bg-neutral-900 disabled:opacity-50"
+			[disabled]="zones().length === 0" (click)="undoLast()">
+			Undo last
+		</button>
+	</div>
+
+	<div class="relative rounded-xl border border-neutral-800 bg-neutral-950">
+		<canvas #canvas class="w-full h-auto touch-none rounded-xl"
+			(pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)"
+			(pointercancel)="onPointerUp($event)"></canvas>
+		<div class="absolute right-3 top-2 rounded bg-neutral-900/80 px-2 py-1 text-xs text-neutral-500">
+			Zones: {{ zones().length }}
+		</div>
+	</div>
+
+	<div class="text-xs text-neutral-500">
+		Tip: Click-drag to add a rectangular zone. It snaps to the canvas bounds. Undo removes the last zone.
+	</div>
+</div>
