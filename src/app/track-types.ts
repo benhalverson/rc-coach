@@ -15,6 +15,7 @@ export type TrackDef = {
 	widthMeters: number;
 	heightMeters: number;
 	zones: Zone[];
+	centerline?: Vec2[];
 	topdownPx: { w: number; h: number };
 	import: {
 		srcImageName: string;

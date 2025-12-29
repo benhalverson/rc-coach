@@ -1,19 +1,21 @@
 import { CommonModule, JsonPipe } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { orderQuadTLTRBRBL, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import { QuadPicker } from '../quad-picker/quad-picker';
 import { TopdownAnnotator } from '../topdown-annotator/topdown-annotator';
-import type { TrackDef, Zone } from '../track-types';
+import { CenterlineEditor } from '../centerline-editor/centerline-editor';
+import type { TrackDef, Vec2, Zone, ZoneType } from '../track-types';
 
 @Component({
 	selector: 'app-track-editor',
-	imports: [JsonPipe, QuadPicker, CommonModule, TopdownAnnotator],
+	imports: [JsonPipe, QuadPicker, CommonModule, TopdownAnnotator, CenterlineEditor],
 	templateUrl: './track-editor.html',
 	styleUrl: './track-editor.css',
 })
 export class TrackEditor {
 	private readonly cv = inject(Opencv);
+	private readonly annotator = viewChild<TopdownAnnotator>('annotator');
 
 	readonly step = signal<Step>('upload');
 
@@ -34,6 +36,32 @@ export class TrackEditor {
 	readonly heightMeters = signal(12);
 
 	readonly zones = signal<Zone[]>([]);
+	readonly centerline = signal<Vec2[]>([]);
+	readonly centerlinePointsSvg = computed(() =>
+		this.centerline()
+			.map((p) => `${p[0] * 100},${p[1] * 100}`)
+			.join(' '),
+	);
+
+	// Scale calibration via measurement
+	readonly measureMode = signal(false);
+	readonly measurePt1 = signal<Pt | null>(null);
+	readonly measurePt2 = signal<Pt | null>(null);
+	readonly measurePixelDist = computed(() => {
+		const p1 = this.measurePt1();
+		const p2 = this.measurePt2();
+		if (!p1 || !p2) return null;
+		const dx = p2.x - p1.x;
+		const dy = p2.y - p1.y;
+		return Math.hypot(dx, dy);
+	});
+	readonly measureRealDist = signal(0);
+	readonly pixelsPerMeter = computed(() => {
+		const pxDist = this.measurePixelDist();
+		const realDist = this.measureRealDist();
+		if (!pxDist || realDist <= 0) return null;
+		return pxDist / realDist;
+	});
 
 	constructor() {
 		effect(() => {
@@ -72,6 +100,7 @@ export class TrackEditor {
 			heightMeters: this.heightMeters(),
 			topdownPx: { w: top.width, h: top.height },
 			zones: this.zones(),
+			centerline: this.centerline(),
 			import: {
 				srcImageName: this.srcImageName(),
 				srcQuadPx: quad,
@@ -191,6 +220,47 @@ export class TrackEditor {
 		this.quadPx.set(null);
 		this.topDown.set(null);
 		this.zones.set([]);
+		this.centerline.set([]);
+		this.measureMode.set(false);
+		this.measurePt1.set(null);
+		this.measurePt2.set(null);
+		this.measureRealDist.set(0);
+	}
+
+	onMeasureCanvasClick(ev: MouseEvent, canvas: HTMLCanvasElement) {
+		if (!this.measureMode()) return;
+		const rect = canvas.getBoundingClientRect();
+		const x = (ev.clientX - rect.left) * (canvas.width / rect.width);
+		const y = (ev.clientY - rect.top) * (canvas.height / rect.height);
+		const pt = { x, y };
+
+		if (!this.measurePt1()) {
+			this.measurePt1.set(pt);
+		} else if (!this.measurePt2()) {
+			this.measurePt2.set(pt);
+		}
+	}
+
+	applyMeasure() {
+		const ppm = this.pixelsPerMeter();
+		const top = this.topDown();
+		if (!ppm || !top) return;
+
+		const w = top.width / ppm;
+		const h = top.height / ppm;
+		this.widthMeters.set(w);
+		this.heightMeters.set(h);
+		this.measureMode.set(false);
+		this.measurePt1.set(null);
+		this.measurePt2.set(null);
+		this.measureRealDist.set(0);
+	}
+
+	cancelMeasure() {
+		this.measureMode.set(false);
+		this.measurePt1.set(null);
+		this.measurePt2.set(null);
+		this.measureRealDist.set(0);
 	}
 
 	downloadTopdownPng() {
@@ -220,11 +290,31 @@ export class TrackEditor {
 		a.click();
 		URL.revokeObjectURL(a.href);
 	}
-}
 
+	selectZone(id: string) {
+		const ann = this.annotator();
+		if (ann) {
+			ann.selectedZoneId.set(id);
+		}
+	}
+
+	deleteZone(id: string) {
+		this.zones.update((zs) => zs.filter((z) => z.id !== id));
+	}
+
+	countZonesByType(type: ZoneType): number {
+		return this.zones().filter((z) => z.type === type).length;
+	}
+
+	onCenterlineChange(line: Vec2[]) {
+		this.centerline.set(line);
+	}
+}
 type Step =
 	| 'scale'
 	| 'upload'
 	| 'quad'
 	| 'annotate'
 	| 'export'
+	| 'centerline'
+	| 'viewer'

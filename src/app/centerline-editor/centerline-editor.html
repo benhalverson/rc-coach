@@ -1,0 +1,22 @@
+<div class="space-y-2">
+	<div class="flex items-center gap-2 text-sm text-neutral-800">
+		<span class="font-medium">Centerline points: {{ lineIn().length }}</span>
+		<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+			[disabled]="lineIn().length === 0" (click)="undoLast()">
+			Undo last
+		</button>
+		<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+			[disabled]="lineIn().length === 0" (click)="clearLine()">
+			Clear
+		</button>
+	</div>
+
+	<div class="relative rounded-xl border border-neutral-800 bg-neutral-950">
+		<canvas #canvas class="w-full h-auto touch-none rounded-xl"
+			(pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)"
+			(pointercancel)="onPointerUp($event)"></canvas>
+		<div class="absolute right-3 top-2 rounded bg-neutral-900/90 px-2 py-1 text-xs text-neutral-100">
+			Click to add points. Drag existing points to adjust.
+		</div>
+	</div>
+</div>

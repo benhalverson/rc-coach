@@ -56,10 +56,60 @@
       </label>
     </div>
 
-    <div class="rounded-xl border border-neutral-800 p-2">
-      <img *ngIf="topDownDataUrl() as td" [src]="td" alt="Top-down preview"
-        class="w-full h-auto rounded-lg border border-neutral-800" />
-      <div *ngIf="!topDownDataUrl()" class="text-neutral-500">No topdown yet.</div>
+    <div class="rounded-xl border border-neutral-800 p-2 space-y-2">
+      <div *ngIf="!measureMode()">
+        <img *ngIf="topDownDataUrl() as td" [src]="td" alt="Top-down preview"
+          class="w-full h-auto rounded-lg border border-neutral-800" />
+        <div *ngIf="!topDownDataUrl()" class="text-neutral-500">No topdown yet.</div>
+      </div>
+
+      <div *ngIf="!measureMode() && topDownDataUrl()">
+        <button type="button" class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 w-full"
+          (click)="measureMode.set(true)">
+          Measure scale
+        </button>
+      </div>
+
+      <div *ngIf="measureMode()" class="space-y-3">
+        <div class="text-sm text-neutral-300">Click two points on the image to measure distance.</div>
+        <img *ngIf="topDownDataUrl() as td" [src]="td" alt="Top-down for measurement"
+          (click)="onMeasureCanvasClick($event, $any($event.target))"
+          class="w-full h-auto cursor-crosshair rounded-lg border border-neutral-800" />
+
+        <div class="space-y-2 rounded-lg bg-neutral-900 p-3">
+          <div *ngIf="measurePt1()" class="text-xs text-neutral-400">
+            Point 1: {{ measurePt1()!.x.toFixed(0) }}, {{ measurePt1()!.y.toFixed(0) }}
+          </div>
+          <div *ngIf="measurePt2()" class="text-xs text-neutral-400">
+            Point 2: {{ measurePt2()!.x.toFixed(0) }}, {{ measurePt2()!.y.toFixed(0) }}
+          </div>
+          <div *ngIf="measurePixelDist() as dist" class="text-xs text-neutral-400">
+            Pixel distance: {{ dist.toFixed(1) }}px
+          </div>
+
+          <label *ngIf="measurePt2()" class="block space-y-1">
+            <div class="text-sm text-neutral-400">Real-world distance (meters)</div>
+            <input type="number" step="0.01" placeholder="e.g. 5"
+              class="w-full rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-sm text-neutral-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              [value]="measureRealDist()" (input)="measureRealDist.set($any($event.target).valueAsNumber || 0)" />
+          </label>
+
+          <div *ngIf="pixelsPerMeter() as ppm" class="text-xs text-neutral-300">
+            Calculated: {{ ppm.toFixed(2) }} px/m
+          </div>
+
+          <div class="flex gap-2 pt-2">
+            <button type="button" class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+              (click)="cancelMeasure()">
+              Cancel
+            </button>
+            <button type="button" class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800 disabled:opacity-50"
+              [disabled]="!pixelsPerMeter()" (click)="applyMeasure()">
+              Apply scale
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="flex gap-2">
@@ -75,12 +125,95 @@
   <section *ngIf="step()==='annotate'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
     <div class="text-neutral-500">Draw zones: jumps and wall rides.</div>
 
-    <app-topdown-annotator *ngIf="topDown()" [topdown]="topDown()!" [zonesIn]="zones()" (zonesOut)="zones.set($event)">
-    </app-topdown-annotator>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <!-- Zones summary panel -->
+      <div class="lg:col-span-1 space-y-3">
+        <div class="rounded-lg border border-neutral-700 bg-neutral-900 p-3">
+          <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-neutral-100">Zones</h3>
+            <span class="text-xs text-neutral-400">{{ zones().length }} total</span>
+          </div>
+
+          @if (zones().length === 0) {
+            <p class="text-xs text-neutral-500">No zones yet. Draw some on the canvas.</p>
+          } @else {
+            <div class="space-y-2 max-h-96 overflow-y-auto">
+              @for (zone of zones(); track zone.id) {
+                <div class="rounded border border-neutral-700 bg-neutral-800 p-2 text-xs">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="font-medium" [class.text-cyan-400]="zone.type === 'jump'" [class.text-purple-400]="zone.type === 'wallride'">
+                      {{ zone.type === 'jump' ? '🚀 Jump' : '🧱 Wall Ride' }}
+                    </span>
+                    <span class="text-neutral-500">{{ zone.poly.length }} pts</span>
+                  </div>
+                  <div class="flex gap-1">
+                    <button type="button"
+                      class="flex-1 rounded border border-neutral-600 bg-neutral-700 px-2 py-1 text-xs text-neutral-100 hover:bg-neutral-600"
+                      (click)="selectZone(zone.id)">
+                      Select
+                    </button>
+                    <button type="button"
+                      class="rounded border border-red-700 bg-red-900/30 px-2 py-1 text-xs text-red-400 hover:bg-red-900/50"
+                      (click)="deleteZone(zone.id)">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="rounded-lg border border-neutral-700 bg-neutral-900 p-3 text-xs text-neutral-400">
+          <div class="font-semibold text-neutral-100 mb-2">Stats</div>
+          <div class="space-y-1">
+            <div class="flex justify-between">
+              <span>Jump zones:</span>
+              <span class="text-cyan-400">{{ countZonesByType('jump') }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Wall rides:</span>
+              <span class="text-purple-400">{{ countZonesByType('wallride') }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Annotator canvas -->
+      <div class="lg:col-span-2">
+        <app-topdown-annotator *ngIf="topDown()" [topdown]="topDown()!" [zonesIn]="zones()"
+          (zonesOut)="zones.set($event)" #annotator>
+        </app-topdown-annotator>
+      </div>
+    </div>
 
     <div class="flex gap-2">
       <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
         (click)="step.set('scale')">Back</button>
+
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="step.set('centerline')">Next: centerline</button>
+    </div>
+  </section>
+
+  <!-- CENTERLINE -->
+  <section *ngIf="step()==='centerline'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
+    <div class="text-neutral-500">Draw the racing line (centerline). Click to add points, drag to adjust.</div>
+
+    <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-3 space-y-3">
+      <div class="flex items-center justify-between text-sm text-neutral-300">
+        <span>Points: {{ centerline().length }}</span>
+        <span>Use undo/clear to refine</span>
+      </div>
+
+      <app-centerline-editor *ngIf="topDown()" [topdown]="topDown()!" [lineIn]="centerline()"
+        (lineOut)="onCenterlineChange($event)">
+      </app-centerline-editor>
+    </div>
+
+    <div class="flex gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="step.set('annotate')">Back</button>
 
       <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
         (click)="step.set('export')">Next: export</button>
@@ -97,6 +230,9 @@
 
       <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50"
         [disabled]="!trackDef()" (click)="downloadTrackJson()">Download track.json</button>
+
+      <button class="rounded-lg border border-cyan-700 px-3 py-2 text-cyan-200 hover:bg-cyan-950 disabled:opacity-50"
+        [disabled]="!trackDef()" (click)="step.set('viewer')">Open viewer (no reupload)</button>
     </div>
 
     <pre class="overflow-auto rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300"
@@ -105,6 +241,41 @@
     <div class="flex gap-2">
       <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
         (click)="step.set('annotate')">Back</button>
+    </div>
+  </section>
+
+  <!-- VIEWER (no reupload) -->
+  <section *ngIf="step()==='viewer'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
+    <div class="text-neutral-500">Session viewer: using current topdown + zones without reuploading.</div>
+
+    <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+      <div class="mb-2 flex items-center justify-between text-sm text-neutral-300">
+        <span>{{ name() }} — {{ widthMeters().toFixed(2) }}m x {{ heightMeters().toFixed(2) }}m</span>
+        <span>Zones: {{ zones().length }} • Centerline pts: {{ centerline().length }}</span>
+      </div>
+
+      <div class="relative rounded-lg overflow-hidden">
+        <img *ngIf="topDownDataUrl() as td" [src]="td" alt="Topdown" class="w-full h-auto block" />
+        <div class="pointer-events-none absolute inset-0 opacity-90">
+          <app-topdown-annotator *ngIf="topDown()" [topdown]="topDown()!" [zonesIn]="zones()"
+            (zonesOut)="zones.set($event)" class="pointer-events-none"></app-topdown-annotator>
+          <svg class="pointer-events-none absolute inset-0" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <polyline *ngIf="centerline().length > 1"
+              [attr.points]="centerlinePointsSvg()"
+              fill="none" stroke="#22d3ee" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round" />
+            <g *ngIf="centerline().length">
+              <circle *ngFor="let p of centerline()" [attr.cx]="p[0]*100" [attr.cy]="p[1]*100" r="1.4" fill="#22d3ee" />
+            </g>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="step.set('export')">Back</button>
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="step.set('annotate')">Edit zones</button>
     </div>
   </section>
 </div>

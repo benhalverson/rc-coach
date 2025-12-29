@@ -32,6 +32,9 @@ export class TopdownAnnotator {
 
 	readonly zones = signal<Zone[]>([]);
 	readonly currentType = signal<ZoneType>('jump');
+	readonly drawMode = signal<'rect' | 'polygon'>('rect');
+	readonly selectedZoneId = signal<string | null>(null);
+	readonly polygonPoints = signal<Pt[]>([]);
 	private readonly dragStart = signal<Pt | null>(null);
 	private readonly preview = signal<Pt[] | null>(null);
 	private readonly injector = inject(Injector);
@@ -45,6 +48,8 @@ export class TopdownAnnotator {
 					this.topdown();
 					this.preview();
 					this.zones();
+					this.selectedZoneId();
+					this.polygonPoints();
 					this.redraw();
 				});
 			});
@@ -55,12 +60,40 @@ export class TopdownAnnotator {
 		ev.preventDefault();
 		const pt = this.pointerToCanvas(ev);
 		if (!pt) return;
-		this.dragStart.set(pt);
-		this.preview.set(null);
-		this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
+
+		// Check if clicking on existing zone for selection
+		const clickedZone = this.findZoneAtPoint(pt);
+		if (clickedZone) {
+			this.selectedZoneId.set(clickedZone.id);
+			return;
+		}
+
+		// Clear selection if clicking empty space
+		this.selectedZoneId.set(null);
+
+		if (this.drawMode() === 'polygon') {
+			// Add vertex to polygon
+			this.polygonPoints.update((pts) => [...pts, pt]);
+		} else {
+			// Start rectangle drag
+			this.dragStart.set(pt);
+			this.preview.set(null);
+			this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
+		}
 	}
 
 	onPointerMove(ev: PointerEvent) {
+		if (this.drawMode() === 'polygon') {
+			const pt = this.pointerToCanvas(ev);
+			if (!pt) return;
+			const polyPts = this.polygonPoints();
+			if (polyPts.length > 0) {
+				// Show preview line from last point to cursor
+				this.preview.set([...polyPts, pt]);
+			}
+			return;
+		}
+
 		const start = this.dragStart();
 		if (!start) return;
 		const pt = this.pointerToCanvas(ev);
@@ -71,6 +104,8 @@ export class TopdownAnnotator {
 	}
 
 	onPointerUp(ev: PointerEvent) {
+		if (this.drawMode() === 'polygon') return;
+
 		const start = this.dragStart();
 		const poly = this.preview();
 		this.dragStart.set(null);
@@ -93,6 +128,77 @@ export class TopdownAnnotator {
 		this.zones.update((zs) => zs.slice(0, -1));
 		this.zonesOut.emit(this.zones());
 		this.redraw();
+	}
+
+	finishPolygon() {
+		const pts = this.polygonPoints();
+		if (pts.length < 3) return; // Need at least 3 points
+
+		const { width, height } = this.canvasRef().nativeElement;
+		const normPoly = pts.map((p) => pxToNorm(p, width, height));
+		const next: Zone = {
+			id: crypto.randomUUID(),
+			type: this.currentType(),
+			poly: normPoly,
+		};
+		this.zones.update((zs) => [...zs, next]);
+		this.zonesOut.emit(this.zones());
+		this.polygonPoints.set([]);
+		this.preview.set(null);
+	}
+
+	cancelPolygon() {
+		this.polygonPoints.set([]);
+		this.preview.set(null);
+	}
+
+	deleteSelected() {
+		const id = this.selectedZoneId();
+		if (!id) return;
+		this.zones.update((zs) => zs.filter((z) => z.id !== id));
+		this.zonesOut.emit(this.zones());
+		this.selectedZoneId.set(null);
+	}
+
+	changeSelectedType(newType: ZoneType) {
+		const id = this.selectedZoneId();
+		if (!id) return;
+		this.zones.update((zs) =>
+			zs.map((z) => (z.id === id ? { ...z, type: newType } : z)),
+		);
+		this.zonesOut.emit(this.zones());
+	}
+
+	private findZoneAtPoint(pt: Pt): Zone | null {
+		const { width, height } = this.canvasRef().nativeElement;
+		const zones = this.zones();
+		// Check zones in reverse order (most recent first)
+		for (let i = zones.length - 1; i >= 0; i--) {
+			const z = zones[i];
+			const polyPx = z.poly.map((p) => ({
+				x: p[0] * width,
+				y: p[1] * height,
+			}));
+			if (this.pointInPolygon(pt, polyPx)) {
+				return z;
+			}
+		}
+		return null;
+	}
+
+	private pointInPolygon(pt: Pt, poly: Pt[]): boolean {
+		let inside = false;
+		for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+			const xi = poly[i].x;
+			const yi = poly[i].y;
+			const xj = poly[j].x;
+			const yj = poly[j].y;
+			const intersect =
+				yi > pt.y !== yj > pt.y &&
+				pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi;
+			if (intersect) inside = !inside;
+		}
+		return inside;
 	}
 
 	private pointerToCanvas(ev: PointerEvent): Pt | null {
@@ -120,15 +226,23 @@ export class TopdownAnnotator {
 		ctx.drawImage(top, 0, 0, top.width, top.height);
 
 		const zones = this.zones();
+		const selectedId = this.selectedZoneId();
 		for (const z of zones) {
-			this.drawPoly(
-				ctx,
-				z.poly.map((p) => ({
-					x: p[0] * canvas.width,
-					y: p[1] * canvas.height,
-				})),
-				zoneColor(z.type),
-			);
+			const isSelected = z.id === selectedId;
+			const polyPx = z.poly.map((p) => ({
+				x: p[0] * canvas.width,
+				y: p[1] * canvas.height,
+			}));
+			this.drawPoly(ctx, polyPx, zoneColor(z.type), false, isSelected);
+		}
+
+		// Draw polygon in progress
+		const polyPts = this.polygonPoints();
+		if (polyPts.length > 0) {
+			for (const pt of polyPts) {
+				ctx.fillStyle = '#22d3ee';
+				ctx.fillRect(pt.x - 4, pt.y - 4, 8, 8);
+			}
 		}
 
 		const preview = this.preview();
@@ -142,18 +256,28 @@ export class TopdownAnnotator {
 		pts: Pt[],
 		stroke: string,
 		dashed = false,
+		selected = false,
 	) {
 		if (pts.length === 0) return;
 		ctx.save();
-		ctx.lineWidth = 2;
+		ctx.lineWidth = selected ? 4 : 2;
 		ctx.strokeStyle = stroke;
-		ctx.fillStyle = 'rgba(0,0,0,0)';
+		ctx.fillStyle = selected ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0,0,0,0)';
 		if (dashed) ctx.setLineDash([6, 4]);
 		ctx.beginPath();
 		ctx.moveTo(pts[0].x, pts[0].y);
 		for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
 		ctx.closePath();
 		ctx.stroke();
+		if (selected) ctx.fill();
+
+		// Draw handles for selected zones
+		if (selected) {
+			ctx.fillStyle = '#ffffff';
+			for (const pt of pts) {
+				ctx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+			}
+		}
 		ctx.restore();
 	}
 }

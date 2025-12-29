@@ -1,33 +1,99 @@
 <div class="annotator space-y-3">
-	<div class="flex items-center gap-2 text-sm text-neutral-500">
-		<span class="text-neutral-500">Zone type</span>
-		<label class="inline-flex items-center gap-1">
-			<input type="radio" name="zone-type" value="jump" [checked]="currentType() === 'jump'"
-				(change)="currentType.set('jump')" />
-			Jump
-		</label>
-		<label class="inline-flex items-center gap-1">
-			<input type="radio" name="zone-type" value="wallride" [checked]="currentType() === 'wallride'"
-				(change)="currentType.set('wallride')" />
-			Wall ride
-		</label>
+	<div class="space-y-2">
+		<!-- Draw mode selection -->
+		<div class="flex items-center gap-2 text-sm text-neutral-800">
+			<span class="font-medium">Draw mode:</span>
+			<label class="inline-flex items-center gap-1">
+				<input type="radio" name="draw-mode" value="rect" [checked]="drawMode() === 'rect'"
+					(change)="drawMode.set('rect')" />
+				Rectangle
+			</label>
+			<label class="inline-flex items-center gap-1">
+				<input type="radio" name="draw-mode" value="polygon" [checked]="drawMode() === 'polygon'"
+					(change)="drawMode.set('polygon')" />
+				Polygon
+			</label>
+		</div>
 
-		<button type="button" class="ml-auto rounded border border-neutral-700 px-3 py-1 text-xs hover:bg-neutral-900 disabled:opacity-50"
-			[disabled]="zones().length === 0" (click)="undoLast()">
-			Undo last
-		</button>
+		<!-- Zone type for new zones -->
+		@if (!selectedZoneId()) {
+		<div class="flex items-center gap-2 text-sm text-neutral-800">
+			<span class="font-medium">New zone type:</span>
+			<label class="inline-flex items-center gap-1">
+				<input type="radio" name="zone-type" value="jump" [checked]="currentType() === 'jump'"
+					(change)="currentType.set('jump')" />
+				Jump
+			</label>
+			<label class="inline-flex items-center gap-1">
+				<input type="radio" name="zone-type" value="wallride" [checked]="currentType() === 'wallride'"
+					(change)="currentType.set('wallride')" />
+				Wall ride
+			</label>
+		</div>
+		}
+
+		<!-- Selected zone controls -->
+		@if (selectedZoneId()) {
+		<div class="flex items-center gap-2 text-sm text-neutral-800">
+			<span class="font-medium">Selected zone:</span>
+			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+				(click)="changeSelectedType('jump')">
+				Set Jump
+			</button>
+			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+				(click)="changeSelectedType('wallride')">
+				Set Wall Ride
+			</button>
+			<button type="button" class="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+				(click)="deleteSelected()">
+				Delete
+			</button>
+			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+				(click)="selectedZoneId.set(null)">
+				Deselect
+			</button>
+		</div>
+		}
+
+		<!-- Polygon controls -->
+		@if (drawMode() === 'polygon' && polygonPoints().length > 0) {
+		<div class="flex items-center gap-2 text-sm text-neutral-800">
+			<span class="font-medium">Polygon: {{ polygonPoints().length }} points</span>
+			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100 disabled:opacity-50"
+				[disabled]="polygonPoints().length < 3" (click)="finishPolygon()">
+				Finish
+			</button>
+			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+				(click)="cancelPolygon()">
+				Cancel
+			</button>
+		</div>
+		}
+
+		<!-- Undo button -->
+		<div class="flex items-center gap-2 text-sm">
+			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100 disabled:opacity-50"
+				[disabled]="zones().length === 0" (click)="undoLast()">
+				Undo last zone
+			</button>
+		</div>
 	</div>
 
 	<div class="relative rounded-xl border border-neutral-800 bg-neutral-950">
 		<canvas #canvas class="w-full h-auto touch-none rounded-xl"
 			(pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)"
 			(pointercancel)="onPointerUp($event)"></canvas>
-		<div class="absolute right-3 top-2 rounded bg-neutral-900/80 px-2 py-1 text-xs text-neutral-500">
+		<div class="absolute right-3 top-2 rounded bg-neutral-900/90 px-2 py-1 text-xs text-neutral-100">
 			Zones: {{ zones().length }}
 		</div>
 	</div>
 
-	<div class="text-xs text-neutral-500">
-		Tip: Click-drag to add a rectangular zone. It snaps to the canvas bounds. Undo removes the last zone.
+	<div class="text-xs text-neutral-700">
+		@if (drawMode() === 'rect') {
+		<p>Rectangle mode: Click-drag to add a rectangular zone.</p>
+		} @else {
+		<p>Polygon mode: Click to add vertices. Click "Finish" when done (min 3 points).</p>
+		}
+		<p>Click any zone to select it. Selected zones can be edited or deleted.</p>
 	</div>
 </div>
