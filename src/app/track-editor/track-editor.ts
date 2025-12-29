@@ -226,8 +226,5 @@ type Step =
 	| 'scale'
 	| 'upload'
 	| 'quad'
-	| 'pick-quad'
-	| 'define-zones'
 	| 'annotate'
 	| 'export'
-	| 'review';
