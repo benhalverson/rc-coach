@@ -1,5 +1,18 @@
-import { afterNextRender, ChangeDetectionStrategy, Component, effect, ElementRef, inject, Injector, input, output, runInInjectionContext, signal, viewChild } from '@angular/core';
-import { pxToNorm, rectPolyPx, type Pt } from '../geometry/geometry';
+import {
+	afterNextRender,
+	ChangeDetectionStrategy,
+	Component,
+	ElementRef,
+	effect,
+	Injector,
+	inject,
+	input,
+	output,
+	runInInjectionContext,
+	signal,
+	viewChild,
+} from '@angular/core';
+import { type Pt, pxToNorm, rectPolyPx } from '../geometry/geometry';
 import type { Zone, ZoneType } from '../track-types';
 
 @Component({
@@ -14,7 +27,8 @@ export class TopdownAnnotator {
 	readonly zonesIn = input<Zone[]>([]);
 	readonly zonesOut = output<Zone[]>();
 
-	private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
+	private readonly canvasRef =
+		viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
 
 	readonly zones = signal<Zone[]>([]);
 	readonly currentType = signal<ZoneType>('jump');
@@ -107,7 +121,14 @@ export class TopdownAnnotator {
 
 		const zones = this.zones();
 		for (const z of zones) {
-			this.drawPoly(ctx, z.poly.map((p) => ({ x: p[0] * canvas.width, y: p[1] * canvas.height })), zoneColor(z.type));
+			this.drawPoly(
+				ctx,
+				z.poly.map((p) => ({
+					x: p[0] * canvas.width,
+					y: p[1] * canvas.height,
+				})),
+				zoneColor(z.type),
+			);
 		}
 
 		const preview = this.preview();
@@ -116,7 +137,12 @@ export class TopdownAnnotator {
 		}
 	}
 
-	private drawPoly(ctx: CanvasRenderingContext2D, pts: Pt[], stroke: string, dashed = false) {
+	private drawPoly(
+		ctx: CanvasRenderingContext2D,
+		pts: Pt[],
+		stroke: string,
+		dashed = false,
+	) {
 		if (pts.length === 0) return;
 		ctx.save();
 		ctx.lineWidth = 2;

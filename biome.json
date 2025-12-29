@@ -6,7 +6,15 @@
 		"useIgnoreFile": true
 	},
 	"files": {
-		"includes": ["**", "!!**/dist", "!!cypress", "!!worker-configuration.d.ts"]
+		"includes": [
+			"**",
+			"!!**/dist",
+			"!!cypress",
+			"!!worker-configuration.d.ts",
+			"!!opencv.js",
+			"!!**/opencv.js",
+			"!!public/assets/opencv"
+		]
 	},
 	"formatter": {
 		"enabled": true,

@@ -54,7 +54,7 @@ export class QuadPicker {
 
 	emitQuad() {
 		const pts = this.pts();
-    console.log('emitQuad pts', pts);
+		console.log('emitQuad pts', pts);
 		if (pts.length !== 4) return;
 		this.quad.emit(pts);
 	}

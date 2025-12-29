@@ -43,7 +43,10 @@ export class TrackEditor {
 				return;
 			}
 			const url = top.toDataURL('image/png');
-			console.log('dataURL generated', { length: url.length, prefix: url.slice(0, 50) });
+			console.log('dataURL generated', {
+				length: url.length,
+				prefix: url.slice(0, 50),
+			});
 			this.topDownDataUrl.set(url);
 		});
 	}
@@ -110,27 +113,36 @@ export class TrackEditor {
 		const outH = this.topDownH();
 
 		console.log('onQuad: before warp', {
-			imgW: img.width, imgH: img.height,
-			quad: ordered, outW, outH,
-			cvReady: !!(window as unknown as { cv?: { Mat: unknown } }).cv?.Mat
+			imgW: img.width,
+			imgH: img.height,
+			quad: ordered,
+			outW,
+			outH,
+			cvReady: !!(window as unknown as { cv?: { Mat: unknown } }).cv?.Mat,
 		});
 
 		let canvas: HTMLCanvasElement;
 		try {
 			canvas = this.cv.warpPerspective(img, ordered, outW, outH);
-			console.log('warp succeeded, canvas dims', { w: canvas.width, h: canvas.height });
+			console.log('warp succeeded, canvas dims', {
+				w: canvas.width,
+				h: canvas.height,
+			});
 		} catch (err) {
 			console.error('warpPerspective failed', err);
 			canvas = this.fallbackDraw(img, outW, outH);
 		}
 
 		const blankAfterWarp = this.isBlankCanvas(canvas);
-		console.log('warp result', { w: canvas.width, h: canvas.height, blankAfterWarp });
+		console.log('warp result', {
+			w: canvas.width,
+			h: canvas.height,
+			blankAfterWarp,
+		});
 		if (blankAfterWarp) {
 			console.log('warp produced blank canvas, using fallback');
 			canvas = this.fallbackDraw(img, outW, outH);
 		}
-
 
 		this.topDown.set(canvas);
 
@@ -138,7 +150,11 @@ export class TrackEditor {
 		this.step.set('scale');
 	}
 
-	private fallbackDraw(img: HTMLImageElement, w: number, h: number): HTMLCanvasElement {
+	private fallbackDraw(
+		img: HTMLImageElement,
+		w: number,
+		h: number,
+	): HTMLCanvasElement {
 		const c = document.createElement('canvas');
 		c.width = w;
 		c.height = h;
