@@ -106,7 +106,10 @@ function pointToSegmentDistance(pt: Vec2, a: Vec2, b: Vec2): number {
 	const lenSq = dx * dx + dy * dy;
 	if (lenSq < 1e-10) return Math.hypot(pt[0] - a[0], pt[1] - a[1]);
 
-	const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / lenSq));
+	const t = Math.max(
+		0,
+		Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / lenSq),
+	);
 	const closest = [a[0] + t * dx, a[1] + t * dy];
 	return Math.hypot(pt[0] - closest[0], pt[1] - closest[1]);
 }
@@ -121,7 +124,9 @@ function pointInPolygon(pt: Vec2, poly: Vec2[]): boolean {
 		const yi = poly[i][1];
 		const xj = poly[j][0];
 		const yj = poly[j][1];
-		const intersect = yi > pt[1] !== yj > pt[1] && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi;
+		const intersect =
+			yi > pt[1] !== yj > pt[1] &&
+			pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi;
 		if (intersect) inside = !inside;
 	}
 	return inside;

@@ -23,7 +23,8 @@ export interface CenterlineParams {
  * @returns parameterized centerline with s, θ, κ.
  */
 export function parameterizeCenterline(points: Vec2[]): CenterlineParams {
-	if (points.length < 2) throw new Error('Need at least 2 points for centerline');
+	if (points.length < 2)
+		throw new Error('Need at least 2 points for centerline');
 
 	const arcLengths: number[] = [0];
 	const headings: number[] = [];
@@ -51,7 +52,9 @@ export function parameterizeCenterline(points: Vec2[]): CenterlineParams {
 		const hNext = headings[(i + 1) % headings.length];
 		const hPrev = headings[i === 0 ? headings.length - 1 : i - 1];
 		const dHeading = hNext - hPrev;
-		const dS = arcLengths[(i + 1) % arcLengths.length] - arcLengths[i === 0 ? arcLengths.length - 1 : i - 1];
+		const dS =
+			arcLengths[(i + 1) % arcLengths.length] -
+			arcLengths[i === 0 ? arcLengths.length - 1 : i - 1];
 		const curv = dS > 0.1 ? dHeading / dS : 0;
 		curvatures.push(curv);
 	}
@@ -74,7 +77,10 @@ export function parameterizeCenterline(points: Vec2[]): CenterlineParams {
  * @param s arc-length query (wrapped to [0, totalLength]).
  * @returns [x, y] position at arc-length s.
  */
-export function poseAtArcLength(params: CenterlineParams, s: number): { pos: Vec2; heading: number; curvature: number } {
+export function poseAtArcLength(
+	params: CenterlineParams,
+	s: number,
+): { pos: Vec2; heading: number; curvature: number } {
 	const { points, arcLengths, totalLength, headings, curvatures } = params;
 	const sWrapped = ((s % totalLength) + totalLength) % totalLength;
 
@@ -112,7 +118,10 @@ export function poseAtArcLength(params: CenterlineParams, s: number): { pos: Vec
  * @param pt world [x, y] point.
  * @returns { s, distance, lateral_error_d }.
  */
-export function nearestArcLength(params: CenterlineParams, pt: Vec2): { s: number; distance: number; d: number } {
+export function nearestArcLength(
+	params: CenterlineParams,
+	pt: Vec2,
+): { s: number; distance: number; d: number } {
 	const { points, arcLengths } = params;
 	let minDist = Number.POSITIVE_INFINITY;
 	let bestS = 0;
@@ -122,7 +131,10 @@ export function nearestArcLength(params: CenterlineParams, pt: Vec2): { s: numbe
 		const p0 = points[i];
 		const p1 = points[(i + 1) % points.length];
 		const s0 = arcLengths[i];
-		const s1 = i < points.length - 1 ? arcLengths[i + 1] : arcLengths[0] + params.totalLength;
+		const s1 =
+			i < points.length - 1
+				? arcLengths[i + 1]
+				: arcLengths[0] + params.totalLength;
 
 		// Project pt onto segment p0–p1.
 		const dx = p1[0] - p0[0];
@@ -130,7 +142,10 @@ export function nearestArcLength(params: CenterlineParams, pt: Vec2): { s: numbe
 		const lenSq = dx * dx + dy * dy;
 		let t = 0;
 		if (lenSq > 1e-6) {
-			t = Math.max(0, Math.min(1, ((pt[0] - p0[0]) * dx + (pt[1] - p0[1]) * dy) / lenSq));
+			t = Math.max(
+				0,
+				Math.min(1, ((pt[0] - p0[0]) * dx + (pt[1] - p0[1]) * dy) / lenSq),
+			);
 		}
 
 		const closest: Vec2 = [p0[0] + t * dx, p0[1] + t * dy];

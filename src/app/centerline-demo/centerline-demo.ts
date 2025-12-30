@@ -1,17 +1,20 @@
+import { CommonModule } from '@angular/common';
 import {
+	ChangeDetectionStrategy,
 	Component,
 	computed,
 	effect,
-	signal,
-	ChangeDetectionStrategy,
 	inject,
+	signal,
 	viewChild,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { TrackStore } from '../state/track-store';
-import { parameterizeCenterline, poseAtArcLength } from '../geometry/centerline-params';
+import {
+	parameterizeCenterline,
+	poseAtArcLength,
+} from '../geometry/centerline-params';
 import { arcLengthRate } from '../geometry/frenet';
 import { extractTrackLimits } from '../geometry/track-limits';
+import { TrackStore } from '../state/track-store';
 import type { Zone } from '../track-types';
 
 /**
@@ -41,7 +44,9 @@ interface VehicleState {
 })
 export class CenterlineDemoComponent {
 	private store = inject(TrackStore);
-	private canvas = viewChild<{ nativeElement: HTMLCanvasElement }>('demoCanvas');
+	private canvas = viewChild<{ nativeElement: HTMLCanvasElement }>(
+		'demoCanvas',
+	);
 
 	// Derived from track store
 	centerlineParams = computed(() => {
@@ -240,14 +245,14 @@ export class CenterlineDemoComponent {
 		const vehicleX = pose.pos[0] * scale;
 		const vehicleY = pose.pos[1] * scale;
 
-		console.log('Rendering vehicle:', { 
-			s: state.s.toFixed(2), 
-			pos: pose.pos, 
-			vehicleX: vehicleX.toFixed(1), 
-			vehicleY: vehicleY.toFixed(1), 
+		console.log('Rendering vehicle:', {
+			s: state.s.toFixed(2),
+			pos: pose.pos,
+			vehicleX: vehicleX.toFixed(1),
+			vehicleY: vehicleY.toFixed(1),
 			scale: scale.toFixed(2),
 			canvasW: canvas.width,
-			canvasH: canvas.height
+			canvasH: canvas.height,
 		});
 
 		// Draw vehicle (blue circle with white outline for visibility)

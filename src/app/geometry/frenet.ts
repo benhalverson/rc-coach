@@ -1,5 +1,5 @@
 import type { CenterlineParams } from './centerline-params';
-import { poseAtArcLength, nearestArcLength } from './centerline-params';
+import { nearestArcLength, poseAtArcLength } from './centerline-params';
 
 /**
  * Frenet frame (s, d) relative to a parameterized centerline.

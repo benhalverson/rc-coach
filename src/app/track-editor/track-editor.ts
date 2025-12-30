@@ -1,7 +1,7 @@
 import { CommonModule, JsonPipe } from '@angular/common';
 import { Component, inject, viewChild } from '@angular/core';
-import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
+import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
 import { QuadPicker } from '../quad-picker/quad-picker';
 import { TrackStore } from '../state/track-store';

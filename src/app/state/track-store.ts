@@ -1,5 +1,5 @@
 import { computed, effect, Injectable, inject, signal } from '@angular/core';
-import { orderQuadTLTRBRBL, type Pt } from '../geometry/geometry';
+import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import type { TrackDef, Vec2, Zone } from '../track-types';
 
@@ -166,8 +166,9 @@ export class TrackStore {
 	 * @param rawPts four points picked on the source image (any order).
 	 */
 	async onQuad(rawPts: Pt[]) {
-		const ordered = orderQuadTLTRBRBL(rawPts);
-		this.quadPx.set(ordered);
+		// const ordered = orderQuadTLTRBRBL(rawPts);
+    const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
+		this.quadPx.set(orderedv2);
 
 		const img = this.srcImage();
 		if (!img) return;
@@ -179,13 +180,13 @@ export class TrackStore {
 
 		let canvas: HTMLCanvasElement;
 		try {
-			canvas = this.cv.warpPerspective(img, ordered, outW, outH);
+			canvas = this.cv.warpPerspective(img, orderedv2, outW, outH);
 		} catch (err) {
 			console.error('warpPerspective failed', err);
 			canvas = this.fallbackDraw(img, outW, outH);
 		}
 
-		const blankAfterWarp = this.isBlankCanvas(canvas);
+		const blankAfterWarp = this.isMostlyBlankCanvas(canvas);
 		if (blankAfterWarp) {
 			canvas = this.fallbackDraw(img, outW, outH);
 		}
@@ -442,5 +443,34 @@ export class TrackStore {
 			if (r !== 0 || g !== 0 || b !== 0) return false;
 		}
 		return true;
+	}
+
+	private isMostlyBlankCanvas(
+		c: HTMLCanvasElement,
+		nonBlackRatioMin = 0.01,
+	): boolean {
+		const s = document.createElement('canvas');
+		s.width = 32;
+		s.height = 32;
+
+		const sctx = s.getContext('2d', { willReadFrequently: true });
+		if (!sctx) return true;
+
+		sctx.drawImage(c, 0, 0, s.width, s.height);
+		const data = sctx.getImageData(0, 0, s.width, s.height).data;
+
+		let nonBlack = 0;
+		const total = s.width * s.height;
+
+		for (let i = 0; i < data.length; i += 4) {
+			const r = data[i],
+				g = data[i + 1],
+				b = data[i + 2],
+				a = data[i + 3];
+
+			if (a > 0 && r + g + b > 15) nonBlack++;
+		}
+
+		return nonBlack / total < nonBlackRatioMin;
 	}
 }

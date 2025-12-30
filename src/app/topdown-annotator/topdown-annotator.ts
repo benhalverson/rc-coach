@@ -113,7 +113,11 @@ export class TopdownAnnotator {
 
 		const { width, height } = this.canvasRef().nativeElement;
 		const normPoly = poly.map((p) => pxToNorm(p, width, height));
-		const next: Zone = { id: crypto.randomUUID(), type: this.currentType(), poly: normPoly };
+		const next: Zone = {
+			id: crypto.randomUUID(),
+			type: this.currentType(),
+			poly: normPoly,
+		};
 		const updated = [...this.zonesIn(), next];
 		this.zonesOut.emit(updated);
 		this.preview.set(null);
@@ -131,7 +135,11 @@ export class TopdownAnnotator {
 
 		const { width, height } = this.canvasRef().nativeElement;
 		const normPoly = pts.map((p) => pxToNorm(p, width, height));
-		const next: Zone = { id: crypto.randomUUID(), type: this.currentType(), poly: normPoly };
+		const next: Zone = {
+			id: crypto.randomUUID(),
+			type: this.currentType(),
+			poly: normPoly,
+		};
 		const updated = [...this.zonesIn(), next];
 		this.zonesOut.emit(updated);
 		this.polygonPoints.set([]);
@@ -154,7 +162,9 @@ export class TopdownAnnotator {
 	changeSelectedType(newType: ZoneType) {
 		const id = this.selectedZoneId();
 		if (!id) return;
-		const updated = this.zonesIn().map((z) => (z.id === id ? { ...z, type: newType } : z));
+		const updated = this.zonesIn().map((z) =>
+			z.id === id ? { ...z, type: newType } : z,
+		);
 		this.zonesOut.emit(updated);
 	}
 
