@@ -1,0 +1,101 @@
+.demo-container {
+	padding: 1rem;
+	border: 1px solid #ccc;
+	border-radius: 8px;
+	background: #f9f9f9;
+}
+
+h3 {
+	margin-top: 0;
+}
+
+.instructions {
+	font-size: 0.9rem;
+	color: #444;
+	background: #fff3cd;
+	border: 1px solid #ffc107;
+	border-radius: 4px;
+	padding: 0.75rem;
+	margin-bottom: 1rem;
+}
+
+.vehicle-indicator {
+	color: #0066cc;
+	font-weight: bold;
+}
+
+.demo-canvas {
+	border: 2px solid #333;
+	background: white;
+	cursor: crosshair;
+	max-width: 100%;
+	height: auto;
+	margin: 1rem 0;
+}
+
+.gauges {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 0.5rem;
+	margin: 1rem 0;
+}
+
+.gauge {
+	padding: 0.5rem;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	font-size: 0.9rem;
+}
+
+.gauge label {
+	display: block;
+	font-weight: bold;
+	margin-bottom: 0.25rem;
+}
+
+.gauge span {
+	font-family: monospace;
+	color: #0066cc;
+}
+
+.controls {
+	display: flex;
+	gap: 1rem;
+	align-items: center;
+	margin: 1rem 0;
+	flex-wrap: wrap;
+}
+
+.controls button {
+	padding: 0.5rem 1rem;
+	background: #0066cc;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.controls button:hover {
+	background: #0052a3;
+}
+
+.controls div {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.controls label {
+	font-weight: bold;
+	white-space: nowrap;
+}
+
+.controls input[type='range'] {
+	width: 200px;
+}
+
+.info {
+	color: #666;
+	font-style: italic;
+}

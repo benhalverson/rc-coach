@@ -1,6 +1,7 @@
 import { CommonModule, JsonPipe } from '@angular/common';
 import { Component, inject, viewChild } from '@angular/core';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
+import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { type Pt } from '../geometry/geometry';
 import { QuadPicker } from '../quad-picker/quad-picker';
 import { TrackStore } from '../state/track-store';
@@ -15,6 +16,7 @@ import type { Vec2, ZoneType } from '../track-types';
 		CommonModule,
 		TopdownAnnotator,
 		CenterlineEditor,
+		CenterlineDemoComponent,
 	],
 	templateUrl: './track-editor.html',
 	styleUrl: './track-editor.css',
