@@ -12,6 +12,8 @@ Built with **Angular 21 + Signals** and designed to run well on **Cloudflare** (
 
 Competitive RC setup tuning is hard because feedback is subjective (“it feels pushy”). A digital twin starts with a trustworthy track model. This editor is the first milestone: **get the track into a clean, scaled coordinate system** and capture key features that matter for driving and setup (jumps, wall rides, etc.).
 
+For the current implementation inventory and known gaps, see [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
+
 ---
 
 ## Core features
