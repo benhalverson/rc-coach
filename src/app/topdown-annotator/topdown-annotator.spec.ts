@@ -13,6 +13,7 @@ describe('TopdownAnnotator', () => {
 
 		fixture = TestBed.createComponent(TopdownAnnotator);
 		component = fixture.componentInstance;
+		fixture.componentRef.setInput('topdown', document.createElement('canvas'));
 		await fixture.whenStable();
 	});
 

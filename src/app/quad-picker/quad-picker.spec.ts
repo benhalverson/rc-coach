@@ -14,6 +14,7 @@ describe('QuadPicker', () => {
 
 		fixture = TestBed.createComponent(QuadPicker);
 		component = fixture.componentInstance;
+		fixture.componentRef.setInput('image', document.createElement('img'));
 		await fixture.whenStable();
 	});
 
