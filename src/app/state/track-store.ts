@@ -361,6 +361,15 @@ export class TrackStore {
 					console.warn('Invalid track.json');
 					return;
 				}
+				// Discard zones that are structurally invalid (< 3 points)
+				if (Array.isArray(json.zones)) {
+					json.zones = json.zones.filter(
+						(z: Zone) =>
+							z && z.id && z.type && Array.isArray(z.poly) && z.poly.length >= 3,
+					);
+				} else {
+					json.zones = [];
+				}
 				this.importTrack.set(json);
 			} catch (e) {
 				console.error('Failed to parse track.json', e);
@@ -372,6 +381,7 @@ export class TrackStore {
 	/**
 	 * Apply an imported session (PNG + JSON) to the editor state.
 	 * Rehydrates name, dimensions, zones, centerline, and creates the `topDown` canvas.
+	 * Zones with fewer than 3 polygon points are silently discarded.
 	 */
 	applyImport() {
 		const img = this.importTopdownImg();
@@ -381,7 +391,11 @@ export class TrackStore {
 		this.name.set(t.name);
 		this.widthMeters.set(t.widthMeters);
 		this.heightMeters.set(t.heightMeters);
-		this.zones.set(t.zones ?? []);
+		// Filter out any malformed zones before storing
+		const validZones = (t.zones ?? []).filter(
+			(z) => z && z.id && z.type && Array.isArray(z.poly) && z.poly.length >= 3,
+		);
+		this.zones.set(validZones);
 		this.centerline.set(t.centerline ?? []);
 		this.srcImageName.set(t.import?.srcImageName ?? this.srcImageName());
 		this.quadPx.set(t.import?.srcQuadPx ?? null);
