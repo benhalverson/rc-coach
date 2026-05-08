@@ -47,6 +47,7 @@ export class TrackEditor {
 	readonly measureRealDist = this.store.measureRealDist;
 	readonly pixelsPerMeter = this.store.pixelsPerMeter;
 	readonly canGoAnnotate = this.store.canGoAnnotate;
+	readonly warpError = this.store.warpError;
 	readonly trackDef = this.store.trackDef;
 	readonly exportErrors = this.store.exportErrors;
 	readonly exportValid = this.store.exportValid;

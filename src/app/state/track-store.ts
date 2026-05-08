@@ -23,6 +23,7 @@ export class TrackStore {
 	readonly quadPx = signal<Pt[] | null>(null);
 
 	readonly topDown = signal<HTMLCanvasElement | null>(null);
+	readonly warpError = signal<string | null>(null);
 	readonly topDownDataUrl = signal<string | null>(null);
 	readonly topDownW = signal(1600);
 	readonly topDownH = signal(900);
@@ -169,11 +170,18 @@ export class TrackStore {
 		// const ordered = orderQuadTLTRBRBL(rawPts);
     const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
 		this.quadPx.set(orderedv2);
+		this.warpError.set(null);
 
 		const img = this.srcImage();
 		if (!img) return;
 
-		await this.cv.ready();
+		try {
+			await this.cv.ready();
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			this.warpError.set(`OpenCV failed to load: ${msg}`);
+			return;
+		}
 
 		const outW = this.topDownW();
 		const outH = this.topDownH();
@@ -182,13 +190,17 @@ export class TrackStore {
 		try {
 			canvas = this.cv.warpPerspective(img, orderedv2, outW, outH);
 		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
 			console.error('warpPerspective failed', err);
-			canvas = this.fallbackDraw(img, outW, outH);
+			this.warpError.set(`Perspective warp failed: ${msg}`);
+			return;
 		}
 
-		const blankAfterWarp = this.isMostlyBlankCanvas(canvas);
-		if (blankAfterWarp) {
-			canvas = this.fallbackDraw(img, outW, outH);
+		if (this.isMostlyBlankCanvas(canvas)) {
+			this.warpError.set(
+				'Warp produced a blank image — the selected quad may be invalid. Please re-select the corners.',
+			);
+			return;
 		}
 
 		this.topDown.set(canvas);
@@ -203,6 +215,7 @@ export class TrackStore {
 		this.srcImage.set(null);
 		this.quadPx.set(null);
 		this.topDown.set(null);
+		this.warpError.set(null);
 		this.zones.set([]);
 		this.centerline.set([]);
 		this.measureMode.set(false);
