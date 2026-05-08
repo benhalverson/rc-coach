@@ -1,14 +1,14 @@
 <div class="annotator space-y-3">
 	<div class="space-y-2">
 		<!-- Draw mode selection -->
-		<div class="flex items-center gap-2 text-sm text-neutral-800">
+		<div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
 			<span class="font-medium">Draw mode:</span>
-			<label class="inline-flex items-center gap-1">
+			<label class="inline-flex items-center gap-1 min-h-[44px]">
 				<input type="radio" name="draw-mode" value="rect" [checked]="drawMode() === 'rect'"
 					(change)="drawMode.set('rect')" />
 				Rectangle
 			</label>
-			<label class="inline-flex items-center gap-1">
+			<label class="inline-flex items-center gap-1 min-h-[44px]">
 				<input type="radio" name="draw-mode" value="polygon" [checked]="drawMode() === 'polygon'"
 					(change)="drawMode.set('polygon')" />
 				Polygon
@@ -17,14 +17,14 @@
 
 		<!-- Zone type for new zones -->
 		@if (!selectedZoneId()) {
-		<div class="flex items-center gap-2 text-sm text-neutral-800">
+		<div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
 			<span class="font-medium">New zone type:</span>
-			<label class="inline-flex items-center gap-1">
+			<label class="inline-flex items-center gap-1 min-h-[44px]">
 				<input type="radio" name="zone-type" value="jump" [checked]="currentType() === 'jump'"
 					(change)="currentType.set('jump')" />
 				Jump
 			</label>
-			<label class="inline-flex items-center gap-1">
+			<label class="inline-flex items-center gap-1 min-h-[44px]">
 				<input type="radio" name="zone-type" value="wallride" [checked]="currentType() === 'wallride'"
 					(change)="currentType.set('wallride')" />
 				Wall ride
@@ -34,21 +34,21 @@
 
 		<!-- Selected zone controls -->
 		@if (selectedZoneId()) {
-		<div class="flex items-center gap-2 text-sm text-neutral-800">
+		<div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
 			<span class="font-medium">Selected zone:</span>
-			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+			<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 min-h-[44px]"
 				(click)="changeSelectedType('jump')">
 				Set Jump
 			</button>
-			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+			<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 min-h-[44px]"
 				(click)="changeSelectedType('wallride')">
 				Set Wall Ride
 			</button>
-			<button type="button" class="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+			<button type="button" class="rounded border border-red-700 bg-red-900/30 px-3 py-2 text-xs text-red-400 hover:bg-red-900/50 min-h-[44px]"
 				(click)="deleteSelected()">
 				Delete
 			</button>
-			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+			<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 min-h-[44px]"
 				(click)="selectedZoneId.set(null)">
 				Deselect
 			</button>
@@ -57,13 +57,13 @@
 
 		<!-- Polygon controls -->
 		@if (drawMode() === 'polygon' && polygonPoints().length > 0) {
-		<div class="flex items-center gap-2 text-sm text-neutral-800">
+		<div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
 			<span class="font-medium">Polygon: {{ polygonPoints().length }} points</span>
-			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100 disabled:opacity-50"
+			<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 disabled:opacity-50 min-h-[44px]"
 				[disabled]="polygonPoints().length < 3" (click)="finishPolygon()">
 				Finish
 			</button>
-			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+			<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 min-h-[44px]"
 				(click)="cancelPolygon()">
 				Cancel
 			</button>
@@ -71,8 +71,8 @@
 		}
 
 		<!-- Undo button -->
-		<div class="flex items-center gap-2 text-sm">
-			<button type="button" class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-800 hover:bg-neutral-100 disabled:opacity-50"
+		<div class="flex flex-wrap items-center gap-2 text-sm">
+			<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 disabled:opacity-50 min-h-[44px]"
 				[disabled]="zonesIn().length === 0" (click)="undoLast()">
 				Undo last zone
 			</button>
@@ -88,7 +88,7 @@
 		</div>
 	</div>
 
-	<div class="text-xs text-neutral-700">
+	<div class="text-xs text-neutral-400">
 		@if (drawMode() === 'rect') {
 		<p>Rectangle mode: Click-drag to add a rectangular zone.</p>
 		} @else {
