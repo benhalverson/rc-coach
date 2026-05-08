@@ -89,7 +89,7 @@ describe('TrackStore', () => {
 		await new Promise((r) => setTimeout(r, 50));
 
 		expect(store.importTrack()).toBeNull();
-		expect(store.importJsonError()).toMatch(/missing required fields/i);
+		expect(store.importJsonError()).toMatch(/missing required fields|must contain/i);
 	});
 
 	it('onImportTrackJsonFile: clears previous importJsonError on new attempt', async () => {

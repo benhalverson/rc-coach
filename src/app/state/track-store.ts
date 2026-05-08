@@ -384,7 +384,7 @@ export class TrackStore {
 					typeof json.heightMeters !== 'number' ||
 					typeof json.name !== 'string'
 				) {
-					this.importJsonError.set('Invalid track.json: missing required fields (name, widthMeters, heightMeters, topdownPx).');
+					this.importJsonError.set('Invalid track.json: file must contain name, widthMeters, heightMeters, and topdownPx fields.');
 					return;
 				}
 				this.importTrack.set(json);
