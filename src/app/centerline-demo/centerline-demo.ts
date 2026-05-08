@@ -202,7 +202,6 @@ export class CenterlineDemoComponent {
 			ctx.fillStyle = 'red';
 			ctx.font = '16px Arial';
 			ctx.fillText('No centerline available. Draw one first.', 20, 40);
-			console.warn('No centerline params available');
 			return;
 		}
 
@@ -244,16 +243,6 @@ export class CenterlineDemoComponent {
 		const pose = poseAtArcLength(params, state.s);
 		const vehicleX = pose.pos[0] * scale;
 		const vehicleY = pose.pos[1] * scale;
-
-		console.log('Rendering vehicle:', {
-			s: state.s.toFixed(2),
-			pos: pose.pos,
-			vehicleX: vehicleX.toFixed(1),
-			vehicleY: vehicleY.toFixed(1),
-			scale: scale.toFixed(2),
-			canvasW: canvas.width,
-			canvasH: canvas.height,
-		});
 
 		// Draw vehicle (blue circle with white outline for visibility)
 		ctx.fillStyle = 'blue';
