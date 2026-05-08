@@ -1,66 +1,91 @@
 # TASK
 
-Fix issue {{TASK_ID}}: {{ISSUE_TITLE}}
+Implement exactly one GitHub issue:
 
-Pull in the issue using `gh issue view <ID>`. If it has a parent PRD, pull that in too.
+```text
+#{{TASK_ID}} {{ISSUE_TITLE}}
+```
 
-Only work on the issue specified.
+You are already working on branch `{{BRANCH}}`. Do not switch to another feature
+branch unless you are repairing this same branch.
 
-Work on branch {{BRANCH}}. Make commits and run tests.
+# REQUIRED CONTEXT
 
-# CONTEXT
+Read the issue before editing:
 
-Here are the last 10 commits:
+```bash
+gh issue view {{TASK_ID}}
+```
 
-<recent-commits>
+Follow `AGENTS.md` exactly. Use `pnpm`, preserve public APIs and data shapes unless the
+issue explicitly says otherwise, and keep changes small enough for a sequential review.
 
-!`git log -n 10 --format="%H%n%ad%n%B---" --date=short`
+# SCOPE
 
-</recent-commits>
+- Implement only issue `{{TASK_ID}}`.
+- Do not implement follow-up issues.
+- Do not modify unrelated files.
+- Do not merge branches.
+- Do not close the GitHub issue.
+- Do not change product behavior beyond what the issue requests.
+
+If the issue reveals broader architecture work, stop at the smallest safe change and
+leave a concise issue comment describing the blocker or follow-up.
 
 # EXPLORATION
 
-Explore the repo and fill your context window with relevant information that will allow you to complete the task.
+Before editing, inspect the relevant source, tests, scripts, and docs. Prefer `rg` and
+the existing repo patterns. Pay special attention to files and commands listed in the
+issue body.
 
-Pay extra attention to test files that touch the relevant parts of the code.
+# IMPLEMENTATION
 
-# EXECUTION
+For code changes, prefer a tight red/green loop when practical:
 
-If applicable, use RGR to complete the task.
+1. Add or update the smallest relevant test.
+2. Implement the minimal change.
+3. Repeat until the issue acceptance criteria are met.
+4. Refactor only within the changed area if it improves maintainability.
 
-1. RED: write one test
-2. GREEN: write the implementation to pass that test
-3. REPEAT until done
-4. REFACTOR the code
+Documentation-only issues do not require new product tests unless the issue asks for
+them.
 
-# FEEDBACK LOOPS
+# VERIFICATION
 
-Before committing, run these checks to ensure the tests pass:
+Run the commands listed in the issue body when present. If the issue has no command
+section, inspect `package.json` and run the smallest reasonable repo checks, usually:
 
-1. `pnpm exec tsc -p tsconfig.app.json --noEmit`
-2. `pnpm exec tsc -p tsconfig.spec.json --noEmit`
-3. `pnpm exec ng test --watch=false`
+```bash
+pnpm test
+pnpm build
+```
+
+If a listed command is unavailable, do not invent dependencies. Document the blocker in
+the final response and, if useful, in an issue comment.
 
 # COMMIT
 
-Make a git commit. The commit message must:
+Commit only the files related to issue `{{TASK_ID}}`.
 
-1. Start with `RALPH:` prefix
-2. Include task completed + PRD reference
-3. Key decisions made
-4. Files changed
-5. Blockers or notes for next iteration
+Use a concise commit message:
 
-Keep it concise.
+```text
+Sandcastle issue {{TASK_ID}}: <short summary>
+```
 
-# THE ISSUE
+# FINISH
 
-If the task is not complete, leave a comment on the issue with what was done.
+Do not close the issue. Do not merge the branch.
 
-Do not close the issue - this will be done later.
+When complete, include:
 
-Once complete, output <promise>COMPLETE</promise>.
+- Summary of changes.
+- Files changed.
+- Commands run and their result.
+- Any follow-up that should be handled in a later issue.
 
-# FINAL RULES
+Then output:
 
-ONLY WORK ON A SINGLE TASK.
+```text
+<promise>COMPLETE</promise>
+```

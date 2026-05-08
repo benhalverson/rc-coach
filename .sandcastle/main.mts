@@ -1,25 +1,16 @@
-// Parallel Planner with Review — four-phase orchestration loop
+// Sequential issue runner with reviewer
 //
-// This template drives a multi-phase workflow:
-//   Phase 1 (Plan):             An opus agent analyzes open issues, builds a
-//                               dependency graph, and outputs a <plan> JSON
-//                               listing unblocked issues with branch names.
-//   Phase 2 (Execute + Review): For each issue, a sandbox is created via
-//                               createSandbox(). The implementer runs first
-//                               (100 iterations). If it produces commits, a
-//                               reviewer runs in the same sandbox on the same
-//                               branch (1 iteration). All issue pipelines run
-//                               concurrently via Promise.allSettled().
-//   Phase 3 (Merge):            A single agent merges all completed branches
-//                               into the current branch.
+// `pnpm run agent` processes exactly one GitHub issue:
+//   1. Select the lowest-numbered open issue labeled `mvp-stabilization`.
+//   2. If no such issue exists, select the lowest-numbered open issue that
+//      looks related to Track Editor MVP stabilization.
+//   3. Create/use branch `sandcastle/issue-{number}-{slug}`.
+//   4. Run the implementer.
+//   5. If the implementer produced commits, run the reviewer on the same
+//      branch and stop.
 //
-// The outer loop repeats up to MAX_ITERATIONS times so that newly unblocked
-// issues are picked up after each round of merges.
-//
-// Usage:
-//   npx tsx .sandcastle/main.mts
-// Or add to package.json:
-//   "scripts": { "sandcastle": "npx tsx .sandcastle/main.mts" }
+// There is no planner loop, parallel implementation, merge phase, or automatic
+// issue closing in this workflow.
 
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
@@ -27,35 +18,54 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
+type GhIssue = {
+  number: number;
+  title: string;
+  body?: string;
+  labels?: { name: string }[];
+};
 
-// Maximum number of plan→execute→merge cycles before stopping.
-// Raise this if your backlog is large; lower it for a quick smoke-test run.
-const MAX_ITERATIONS = 10;
+type SelectedIssue = {
+  issue: GhIssue;
+  branch: string;
+  reason: string;
+};
+
+const TRACK_EDITOR_TERMS = [
+  "track editor",
+  "mvp",
+  "stabil",
+  "opencv",
+  "quad",
+  "scale",
+  "annotation",
+  "zone",
+  "centerline",
+  "export",
+  "import",
+  "viewer",
+  "mobile",
+];
 
 // Hooks run inside the sandbox before the agent starts each iteration.
-// npm install ensures the sandbox always has fresh dependencies.
 const hooks = {
   sandbox: {
     onSandboxReady: [
       {
         command: [
-          'if [ -d /tmp/gh-host ]; then mkdir -p /home/agent/.config && rm -rf /home/agent/.config/gh && cp -R /tmp/gh-host /home/agent/.config/gh && chmod -R u+rwX /home/agent/.config/gh; fi',
-          'if [ -d /tmp/codex-host ]; then rm -rf /home/agent/.codex && cp -R /tmp/codex-host /home/agent/.codex && chmod -R u+rwX /home/agent/.codex; fi',
-          'corepack prepare pnpm@10.23.0 --activate',
-          'corepack pnpm --version',
-          'CI=true corepack pnpm install --frozen-lockfile',
-        ].join(' && '),
+          "if [ -d /tmp/gh-host ]; then mkdir -p /home/agent/.config && rm -rf /home/agent/.config/gh && cp -R /tmp/gh-host /home/agent/.config/gh && chmod -R u+rwX /home/agent/.config/gh; fi",
+          "if [ -d /tmp/codex-host ]; then rm -rf /home/agent/.codex && cp -R /tmp/codex-host /home/agent/.codex && chmod -R u+rwX /home/agent/.codex; fi",
+          "corepack prepare pnpm@10.23.0 --activate",
+          "corepack pnpm --version",
+          "CI=true corepack pnpm install --frozen-lockfile",
+        ].join(" && "),
         timeoutMs: 300_000,
       },
     ],
   },
 };
-// Copy node_modules from the host into the worktree before each sandbox
-// starts. Avoids a full npm install from scratch; the hook above handles
-// platform-specific binaries and any packages added since the last copy.
+
+// Copy node_modules from the host into the worktree before the sandbox starts.
 const copyToWorktree = ["node_modules"];
 
 function readLocalEnv(): Record<string, string> {
@@ -85,12 +95,16 @@ function readLocalEnv(): Record<string, string> {
   return vars;
 }
 
+function execText(command: string, args: string[]): string {
+  return execFileSync(command, args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
 function ghAuthToken(): string | undefined {
   try {
-    return execFileSync("gh", ["auth", "token"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    return execText("gh", ["auth", "token"]);
   } catch {
     return undefined;
   }
@@ -106,6 +120,109 @@ function hasHostGhAuth(): boolean {
   } catch {
     return false;
   }
+}
+
+function currentGitBranch(): string {
+  return execText("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+}
+
+function listOpenIssues(label?: string): GhIssue[] {
+  const args = ["issue", "list", "--state", "open"];
+  if (label) args.push("--label", label);
+  args.push("--limit", "1000", "--json", "number,title,body,labels");
+
+  const raw = execText("gh", args);
+  const issues = JSON.parse(raw) as GhIssue[];
+  return [...issues].sort((a, b) => a.number - b.number);
+}
+
+function labelNames(issue: GhIssue): string[] {
+  return issue.labels?.map((label) => label.name.toLowerCase()) ?? [];
+}
+
+function isTrackEditorStabilizationIssue(issue: GhIssue): boolean {
+  const labels = labelNames(issue);
+  if (
+    labels.includes("mvp-stabilization") ||
+    labels.includes("track-editor") ||
+    labels.includes("opencv") ||
+    labels.includes("geometry") ||
+    labels.includes("ux")
+  ) {
+    return true;
+  }
+
+  const haystack = [
+    issue.title,
+    issue.body ?? "",
+    ...labels,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const hasTrackEditorSignal =
+    haystack.includes("track editor") ||
+    haystack.includes("top-down") ||
+    haystack.includes("topdown") ||
+    haystack.includes("rc coach");
+  const hasStabilizationSignal = TRACK_EDITOR_TERMS.some((term) =>
+    haystack.includes(term),
+  );
+
+  return hasTrackEditorSignal && hasStabilizationSignal;
+}
+
+function slugify(value: string): string {
+  const slug = value
+    .replace(/^issue\s+\d+\s*:\s*/i, "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+    .replace(/-+$/g, "");
+
+  return slug || "track-editor-mvp";
+}
+
+function selectIssue(): SelectedIssue {
+  let labeled: GhIssue[] = [];
+  try {
+    labeled = listOpenIssues("mvp-stabilization");
+  } catch (error) {
+    console.warn(
+      "Could not list issues by `mvp-stabilization` label; using fallback issue selection.",
+    );
+    if (error instanceof Error && error.message) {
+      console.warn(error.message);
+    }
+  }
+
+  const issue =
+    labeled[0] ??
+    listOpenIssues().find((candidate) =>
+      isTrackEditorStabilizationIssue(candidate),
+    );
+
+  if (!issue) {
+    throw new Error(
+      [
+        "No open issue selected.",
+        "Expected either an open issue labeled `mvp-stabilization` or an open Track Editor MVP stabilization issue.",
+      ].join("\n"),
+    );
+  }
+
+  const reason =
+    labeled.length > 0
+      ? "lowest-numbered open issue labeled `mvp-stabilization`"
+      : "lowest-numbered open issue matching Track Editor MVP stabilization fallback";
+
+  return {
+    issue,
+    branch: `sandcastle/issue-${issue.number}-${slugify(issue.title)}`,
+    reason,
+  };
 }
 
 const localEnv = readLocalEnv();
@@ -178,182 +295,75 @@ const sandboxProvider = () =>
     ],
   });
 
-// ---------------------------------------------------------------------------
-// Main loop
-// ---------------------------------------------------------------------------
+const selected = selectIssue();
+const sourceBranch = currentGitBranch();
 
-for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
-  console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
+console.log("\n=== Sandcastle sequential reviewer ===\n");
+console.log(`Issue: #${selected.issue.number} ${selected.issue.title}`);
+console.log(`Selection: ${selected.reason}`);
+console.log(`Branch: ${selected.branch}`);
+console.log(`Source branch: ${sourceBranch}`);
+console.log("\nNo planner, parallel execution, merge phase, or auto-close will run.\n");
 
-  // -------------------------------------------------------------------------
-  // Phase 1: Plan
-  //
-  // The planning agent (opus, for deeper reasoning) reads the open issue list,
-  // builds a dependency graph, and selects the issues that can be worked in
-  // parallel right now (i.e., no blocking dependencies on other open issues).
-  //
-  // It outputs a <plan> JSON block — we parse that to drive Phase 2.
-  // -------------------------------------------------------------------------
-  const plan = await sandcastle.run({
-    hooks,
-    sandbox: sandboxProvider(),
-    name: "planner",
-    // One iteration is enough: the planner just needs to read and reason,
-    // not write code.
-    maxIterations: 1,
-    // Opus for planning: dependency analysis benefits from deeper reasoning.
+const sandbox = await sandcastle.createSandbox({
+  branch: selected.branch,
+  sandbox: sandboxProvider(),
+  hooks,
+  copyToWorktree,
+});
+
+let implementCommits = 0;
+let reviewCommits = 0;
+let reviewerRan = false;
+
+try {
+  const implement = await sandbox.run({
+    name: "implementer",
+    maxIterations: 100,
     agent: agent(),
-    promptFile: "./.sandcastle/plan-prompt.md",
-  });
-
-  // Extract the <plan>…</plan> block from the agent's stdout.
-  const planMatch = plan.stdout.match(/<plan>([\s\S]*?)<\/plan>/);
-  if (!planMatch) {
-    throw new Error(
-      "Planning agent did not produce a <plan> tag.\n\n" + plan.stdout,
-    );
-  }
-
-  // The plan JSON contains an array of issues, each with id, title, branch.
-  const { issues } = JSON.parse(planMatch[1]!) as {
-    issues: { id: string; title: string; branch: string }[];
-  };
-
-  if (issues.length === 0) {
-    // No unblocked work — either everything is done or everything is blocked.
-    console.log("No unblocked issues to work on. Exiting.");
-    break;
-  }
-
-  console.log(
-    `Planning complete. ${issues.length} issue(s) to work in parallel:`,
-  );
-  for (const issue of issues) {
-    console.log(`  ${issue.id}: ${issue.title} → ${issue.branch}`);
-  }
-
-  // -------------------------------------------------------------------------
-  // Phase 2: Execute + Review
-  //
-  // For each issue, create a sandbox via createSandbox() so the implementer
-  // and reviewer share the same sandbox instance per branch. The implementer
-  // runs first; if it produces commits, the reviewer runs in the same sandbox.
-  //
-  // Promise.allSettled means one failing pipeline doesn't cancel the others.
-  // -------------------------------------------------------------------------
-
-  const settled = await Promise.allSettled(
-    issues.map(async (issue) => {
-      const sandbox = await sandcastle.createSandbox({
-        branch: issue.branch,
-        sandbox: sandboxProvider(),
-        hooks,
-        copyToWorktree,
-      });
-
-      try {
-        // Run the implementer
-        const implement = await sandbox.run({
-          name: "implementer",
-          maxIterations: 100,
-          agent: agent(),
-          promptFile: "./.sandcastle/implement-prompt.md",
-          promptArgs: {
-            TASK_ID: issue.id,
-            ISSUE_TITLE: issue.title,
-            BRANCH: issue.branch,
-          },
-        });
-
-        // Only review if the implementer produced commits
-        if (implement.commits.length > 0) {
-          const review = await sandbox.run({
-            name: "reviewer",
-            maxIterations: 1,
-            agent: agent(),
-            promptFile: "./.sandcastle/review-prompt.md",
-            promptArgs: {
-              BRANCH: issue.branch,
-            },
-          });
-
-          // Merge commits from both runs so the merge phase sees all of them.
-          // Each sandbox.run() only returns commits from its own run.
-          return {
-            ...review,
-            commits: [...implement.commits, ...review.commits],
-          };
-        }
-
-        return implement;
-      } finally {
-        await sandbox.close();
-      }
-    }),
-  );
-
-  // Log any agents that threw (network error, sandbox crash, etc.).
-  for (const [i, outcome] of settled.entries()) {
-    if (outcome.status === "rejected") {
-      console.error(
-        `  ✗ ${issues[i]!.id} (${issues[i]!.branch}) failed: ${outcome.reason}`,
-      );
-    }
-  }
-
-  // Only pass branches that actually produced commits to the merge phase.
-  // An agent that ran successfully but made no commits has nothing to merge.
-  const completedIssues = settled
-    .map((outcome, i) => ({ outcome, issue: issues[i]! }))
-    .filter(
-      (entry) =>
-        entry.outcome.status === "fulfilled" &&
-        entry.outcome.value.commits.length > 0,
-    )
-    .map((entry) => entry.issue);
-
-  const completedBranches = completedIssues.map((i) => i.branch);
-
-  console.log(
-    `\nExecution complete. ${completedBranches.length} branch(es) with commits:`,
-  );
-  for (const branch of completedBranches) {
-    console.log(`  ${branch}`);
-  }
-
-  if (completedBranches.length === 0) {
-    // All agents ran but none made commits — nothing to merge this cycle.
-    console.log("No commits produced. Nothing to merge.");
-    continue;
-  }
-
-  // -------------------------------------------------------------------------
-  // Phase 3: Merge
-  //
-  // One agent merges all completed branches into the current branch,
-  // resolving any conflicts and running tests to confirm everything works.
-  //
-  // The {{BRANCHES}} and {{ISSUES}} prompt arguments are lists that the agent
-  // uses to know which branches to merge and which issues to close.
-  // -------------------------------------------------------------------------
-  await sandcastle.run({
-    hooks,
-    sandbox: sandboxProvider(),
-    name: "merger",
-    maxIterations: 1,
-    agent: agent(),
-    promptFile: "./.sandcastle/merge-prompt.md",
+    promptFile: "./.sandcastle/implement-prompt.md",
     promptArgs: {
-      // A markdown list of branch names, one per line.
-      BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
-      // A markdown list of issue IDs and titles, one per line.
-      ISSUES: completedIssues
-        .map((i) => `- ${i.id}: ${i.title}`)
-        .join("\n"),
+      TASK_ID: String(selected.issue.number),
+      ISSUE_TITLE: selected.issue.title,
+      BRANCH: selected.branch,
+      SOURCE_BRANCH: sourceBranch,
     },
   });
 
-  console.log("\nBranches merged.");
+  implementCommits = implement.commits.length;
+
+  if (implementCommits > 0) {
+    reviewerRan = true;
+    const review = await sandbox.run({
+      name: "reviewer",
+      maxIterations: 1,
+      agent: agent(),
+      promptFile: "./.sandcastle/review-prompt.md",
+      promptArgs: {
+        TASK_ID: String(selected.issue.number),
+        ISSUE_TITLE: selected.issue.title,
+        BRANCH: selected.branch,
+        SOURCE_BRANCH: sourceBranch,
+      },
+    });
+
+    reviewCommits = review.commits.length;
+  }
+} finally {
+  await sandbox.close();
 }
 
-console.log("\nAll done.");
+console.log("\n=== Sandcastle summary ===\n");
+console.log(`Issue: #${selected.issue.number} ${selected.issue.title}`);
+console.log(`Branch: ${selected.branch}`);
+console.log(`Implementer commits: ${implementCommits}`);
+console.log(
+  `Reviewer: ${
+    reviewerRan
+      ? `ran on the same branch (${reviewCommits} commit${reviewCommits === 1 ? "" : "s"})`
+      : "skipped because the implementer produced no commits"
+  }`,
+);
+console.log("Merge phase: not run");
+console.log("Issue closing: not run");
+console.log("\nDone.");

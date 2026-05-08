@@ -1,26 +1,21 @@
-You are working in the rc-coach Angular app.
+# Track Editor MVP Sequential Issue Workflow
 
-Follow AGENTS.md exactly.
+This repository uses `pnpm run agent` to process exactly one GitHub issue at a time.
 
-Task:
-Refactor the RC setup form into smaller standalone Angular components.
+The runner in `.sandcastle/main.mts` selects the lowest-numbered open issue labeled
+`mvp-stabilization`. If no issue has that label, it falls back to the lowest-numbered
+open issue that appears related to Track Editor MVP stabilization.
 
-Constraints:
-- Use Angular standalone components.
-- Prefer signals where appropriate.
-- Use Tailwind utilities for layout.
-- Do not add Angular Material unless already used in this feature.
-- Keep public API/data contracts unchanged.
-- Do not rewrite unrelated files.
-- Run the relevant tests and typecheck.
+For the selected issue, Sandcastle creates or reuses:
 
-Required checks:
-- pnpm test
-- pnpm typecheck
-- pnpm build
+```text
+sandcastle/issue-{number}-{slug}
+```
 
-When finished:
-- Commit the changes.
-- Include a concise summary of changed files.
-- Include any tests that failed and why.
-- Emit <promise>COMPLETE</promise>.
+Then it runs:
+
+1. The implementer prompt for that single issue.
+2. The reviewer prompt on the same branch, only if the implementer produced commits.
+
+This workflow does not run a planner, does not process issues in parallel, does not
+merge branches, and does not close GitHub issues automatically.
