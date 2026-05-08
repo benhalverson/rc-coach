@@ -19,10 +19,12 @@
         <label class="space-y-1">
           <div class="text-xs text-neutral-500">Top-down image (PNG)</div>
           <input type="file" accept="image/png" (change)="onImportTopdownFile($event)" />
+          <div *ngIf="importPngError()" role="alert" class="text-xs text-red-400">{{ importPngError() }}</div>
         </label>
         <label class="space-y-1">
           <div class="text-xs text-neutral-500">Track definition (JSON)</div>
           <input type="file" accept="application/json" (change)="onImportTrackJsonFile($event)" />
+          <div *ngIf="importJsonError()" role="alert" class="text-xs text-red-400">{{ importJsonError() }}</div>
         </label>
       </div>
 

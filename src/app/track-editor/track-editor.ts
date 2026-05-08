@@ -56,6 +56,8 @@ export class TrackEditor {
 	readonly importTrack = this.store.importTrack;
 	readonly canImport = this.store.canImport;
 	readonly pixelsPerMeterAuto = this.store.pixelsPerMeterAuto;
+	readonly importJsonError = this.store.importJsonError;
+	readonly importPngError = this.store.importPngError;
 
 	onFile(ev: Event) {
 		this.store.onFile(ev);

@@ -85,11 +85,11 @@ export class TrackStore {
 
 	readonly trackDef = computed<TrackDef | null>(() => {
 		const top = this.topDown();
-		const quad = this.quadPx();
-		const img = this.srcImage();
-		if (!top || !quad || !img) return null;
+		if (!top) return null;
 
-		return {
+		const quad = this.quadPx();
+
+		const def: TrackDef = {
 			id: crypto.randomUUID(),
 			name: this.name().trim(),
 			widthMeters: this.widthMeters(),
@@ -97,11 +97,16 @@ export class TrackStore {
 			topdownPx: { w: top.width, h: top.height },
 			zones: this.zones(),
 			centerline: this.centerline(),
-			import: {
+		};
+
+		if (quad) {
+			def.import = {
 				srcImageName: this.srcImageName(),
 				srcQuadPx: quad,
-			},
-		};
+			};
+		}
+
+		return def;
 	});
 
 	readonly exportErrors = computed(() => {
@@ -209,6 +214,10 @@ export class TrackStore {
 		this.measurePt1.set(null);
 		this.measurePt2.set(null);
 		this.measureRealDist.set(0);
+		this.importTopdownImg.set(null);
+		this.importTrack.set(null);
+		this.importJsonError.set(null);
+		this.importPngError.set(null);
 	}
 
 	/**
@@ -314,6 +323,8 @@ export class TrackStore {
 	// Import session support
 	readonly importTopdownImg = signal<HTMLImageElement | null>(null);
 	readonly importTrack = signal<TrackDef | null>(null);
+	readonly importJsonError = signal<string | null>(null);
+	readonly importPngError = signal<string | null>(null);
 	readonly canImport = computed(
 		() => !!this.importTopdownImg() && !!this.importTrack(),
 	);
@@ -327,31 +338,37 @@ export class TrackStore {
 
 	/**
 	 * Handle selection of an existing top-down PNG for import.
-	 * Sets `importTopdownImg` once the image loads.
+	 * Sets `importTopdownImg` once the image loads, or sets `importPngError` on failure.
 	 * @param ev change event from a PNG file input.
 	 */
 	onImportTopdownFile(ev: Event) {
 		const input = ev.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
+		this.importPngError.set(null);
 		const url = URL.createObjectURL(file);
 		const img = new Image();
 		img.onload = () => {
 			URL.revokeObjectURL(url);
 			this.importTopdownImg.set(img);
 		};
+		img.onerror = () => {
+			URL.revokeObjectURL(url);
+			this.importPngError.set('Failed to load image. Make sure the file is a valid PNG.');
+		};
 		img.src = url;
 	}
 
 	/**
 	 * Handle selection of a previously exported `track.json` for import.
-	 * Parses and minimally validates shape, then sets `importTrack`.
+	 * Parses and validates shape, then sets `importTrack` or `importJsonError`.
 	 * @param ev change event from a JSON file input.
 	 */
 	onImportTrackJsonFile(ev: Event) {
 		const input = ev.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
+		this.importJsonError.set(null);
 		const reader = new FileReader();
 		reader.onload = () => {
 			try {
@@ -359,16 +376,20 @@ export class TrackStore {
 				const json = JSON.parse(raw) as TrackDef;
 				if (
 					!json ||
+					typeof json !== 'object' ||
 					!json.topdownPx ||
-					!json.widthMeters ||
-					!json.heightMeters
+					typeof json.topdownPx.w !== 'number' ||
+					typeof json.topdownPx.h !== 'number' ||
+					typeof json.widthMeters !== 'number' ||
+					typeof json.heightMeters !== 'number' ||
+					typeof json.name !== 'string'
 				) {
-					console.warn('Invalid track.json');
+					this.importJsonError.set('Invalid track.json: missing required fields (name, widthMeters, heightMeters, topdownPx).');
 					return;
 				}
 				this.importTrack.set(json);
-			} catch (e) {
-				console.error('Failed to parse track.json', e);
+			} catch {
+				this.importJsonError.set('Failed to parse track.json: file is not valid JSON.');
 			}
 		};
 		reader.readAsText(file);
