@@ -126,6 +126,32 @@ function currentGitBranch(): string {
   return execText("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
 }
 
+function localBranchExists(branch: string): boolean {
+  try {
+    execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function remoteBranchExists(remote: string, branch: string): boolean {
+  try {
+    execFileSync(
+      "git",
+      ["show-ref", "--verify", "--quiet", `refs/remotes/${remote}/${branch}`],
+      {
+        stdio: ["ignore", "ignore", "ignore"],
+      },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function listOpenIssues(label?: string): GhIssue[] {
   const args = ["issue", "list", "--state", "open"];
   if (label) args.push("--label", label);
@@ -225,6 +251,46 @@ function selectIssue(): SelectedIssue {
   };
 }
 
+function ensureBranchNamespaceAvailable(branch: string): void {
+  const namespace = branch.split("/").slice(0, -1).join("/");
+  if (!namespace) return;
+
+  const blockingLocal = localBranchExists(namespace);
+  const blockingRemote = remoteBranchExists("origin", namespace);
+
+  if (!blockingLocal) {
+    if (blockingRemote) {
+      console.warn(
+        [
+          `Warning: remote-tracking branch \`origin/${namespace}\` exists.`,
+          `Local Sandcastle work can still use \`${branch}\`, but pushing this branch name to origin may require renaming or removing \`origin/${namespace}\`.`,
+        ].join("\n"),
+      );
+    }
+    return;
+  }
+
+  const lines = [
+    `Cannot create required branch \`${branch}\` because Git already has a branch named \`${namespace}\`.`,
+    "",
+    `Git stores branch names as refs, so \`${namespace}\` blocks nested refs like \`${branch}\`.`,
+    "",
+    "Resolve the namespace collision, then rerun `pnpm run agent`.",
+    "",
+    "Suggested local-only fix if the existing branch is legacy:",
+    `  git branch -m ${namespace} ${namespace}-legacy`,
+  ];
+
+  if (blockingRemote) {
+    lines.push(
+      "",
+      "A remote-tracking branch also exists. Local Sandcastle runs can proceed after the local rename, but pushing `sandcastle/issue-*` branches will require removing or renaming the remote `origin/sandcastle` branch too.",
+    );
+  }
+
+  throw new Error(lines.join("\n"));
+}
+
 const localEnv = readLocalEnv();
 const OPENAI_KEY =
   localEnv.OPENAI_KEY ||
@@ -305,6 +371,8 @@ console.log(`Branch: ${selected.branch}`);
 console.log(`Source branch: ${sourceBranch}`);
 console.log("\nNo planner, parallel execution, merge phase, or auto-close will run.\n");
 
+ensureBranchNamespaceAvailable(selected.branch);
+
 const sandbox = await sandcastle.createSandbox({
   branch: selected.branch,
   sandbox: sandboxProvider(),
@@ -326,7 +394,6 @@ try {
       TASK_ID: String(selected.issue.number),
       ISSUE_TITLE: selected.issue.title,
       BRANCH: selected.branch,
-      SOURCE_BRANCH: sourceBranch,
     },
   });
 
@@ -343,7 +410,6 @@ try {
         TASK_ID: String(selected.issue.number),
         ISSUE_TITLE: selected.issue.title,
         BRANCH: selected.branch,
-        SOURCE_BRANCH: sourceBranch,
       },
     });
 
