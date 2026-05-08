@@ -48,6 +48,9 @@ and what is still missing.
 - `src/app/state/track-store.ts` uses browser-only APIs such as `Image`, `FileReader`, `URL`, and `document` for import/export flows. Those paths must stay gated to client interaction.
 - `src/app/centerline-demo/centerline-demo.ts` installs animation and keyboard listeners, so lifecycle cleanup and browser availability matter for SSR and test environments.
 - `src/app/state/track-store.ts` converts the top-down canvas to a data URL for preview, which is simple but can be expensive for large canvases.
+- Local verification on 2026-05-08 confirmed `pnpm install --frozen-lockfile`, `pnpm test`, `pnpm build`, and `pnpm start` work from the repo root.
+- Local verification on 2026-05-08 also confirmed `pnpm cf-typegen` is currently blocked on Node.js `20.20.2` because `wrangler types` now requires Node.js `>=22`.
+- There is currently no `pnpm lint` script in `package.json`.
 
 ## Notes
 

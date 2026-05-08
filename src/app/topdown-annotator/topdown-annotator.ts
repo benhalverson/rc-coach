@@ -60,25 +60,24 @@ export class TopdownAnnotator {
 		const pt = this.pointerToCanvas(ev);
 		if (!pt) return;
 
-		// Check if clicking on existing zone for selection
+		if (this.drawMode() === 'polygon') {
+			// In polygon mode always add a vertex; never let zone selection interrupt drawing
+			this.polygonPoints.update((pts) => [...pts, pt]);
+			return;
+		}
+
+		// Rect mode: check if clicking on existing zone for selection
 		const clickedZone = this.findZoneAtPoint(pt);
 		if (clickedZone) {
 			this.selectedZoneId.set(clickedZone.id);
 			return;
 		}
 
-		// Clear selection if clicking empty space
+		// Clear selection if clicking empty space, then start rectangle drag
 		this.selectedZoneId.set(null);
-
-		if (this.drawMode() === 'polygon') {
-			// Add vertex to polygon
-			this.polygonPoints.update((pts) => [...pts, pt]);
-		} else {
-			// Start rectangle drag
-			this.dragStart.set(pt);
-			this.preview.set(null);
-			this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
-		}
+		this.dragStart.set(pt);
+		this.preview.set(null);
+		this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
 	}
 
 	onPointerMove(ev: PointerEvent) {
@@ -108,8 +107,19 @@ export class TopdownAnnotator {
 		const start = this.dragStart();
 		const poly = this.preview();
 		this.dragStart.set(null);
-		this.canvasRef().nativeElement.releasePointerCapture(ev.pointerId);
+		// Only release pointer capture if we actually captured it
+		if (start) {
+			this.canvasRef().nativeElement.releasePointerCapture(ev.pointerId);
+		}
 		if (!start || !poly) return;
+
+		// Reject degenerate rectangles smaller than 5px in either dimension
+		const rectW = poly[1].x - poly[0].x;
+		const rectH = poly[2].y - poly[0].y;
+		if (rectW < 5 || rectH < 5) {
+			this.preview.set(null);
+			return;
+		}
 
 		const { width, height } = this.canvasRef().nativeElement;
 		const normPoly = poly.map((p) => pxToNorm(p, width, height));
@@ -149,6 +159,19 @@ export class TopdownAnnotator {
 	cancelPolygon() {
 		this.polygonPoints.set([]);
 		this.preview.set(null);
+	}
+
+	setDrawMode(mode: 'rect' | 'polygon') {
+		if (mode === 'rect') {
+			// Clear any in-progress polygon when switching back to rect
+			this.polygonPoints.set([]);
+			this.preview.set(null);
+		} else {
+			// Clear any in-progress rect drag when switching to polygon
+			this.dragStart.set(null);
+			this.preview.set(null);
+		}
+		this.drawMode.set(mode);
 	}
 
 	deleteSelected() {
