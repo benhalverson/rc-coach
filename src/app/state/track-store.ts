@@ -2,6 +2,7 @@ import { computed, effect, Injectable, inject, signal } from '@angular/core';
 import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, validateQuadTLTRBRBL, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import type { TrackDef, Vec2, Zone } from '../track-types';
+import { getTrackExportErrors, hasValidPositiveDimensions } from './track-validation';
 
 export type Step =
 	| 'scale'
@@ -79,8 +80,7 @@ export class TrackStore {
 	readonly canGoAnnotate = computed(
 		() =>
 			!!this.topDown() &&
-			this.widthMeters() > 0 &&
-			this.heightMeters() > 0 &&
+			hasValidPositiveDimensions(this.widthMeters(), this.heightMeters()) &&
 			this.name().trim().length > 0,
 	);
 
@@ -105,33 +105,14 @@ export class TrackStore {
 		};
 	});
 
-	readonly exportErrors = computed(() => {
-		const errors: string[] = [];
-		const t = this.trackDef();
-		if (!t) {
-			errors.push('Top-down image or quad selection missing.');
-			return errors;
-		}
-
-		if (!t.name || t.name.trim().length === 0) {
-			errors.push('Track name is required.');
-		}
-		if (t.widthMeters <= 0 || t.heightMeters <= 0) {
-			errors.push('Track dimensions must be greater than 0.');
-		}
-
-		if (!t.zones || t.zones.length === 0) {
-			errors.push('At least one zone is required.');
-		} else {
-			for (const z of t.zones) {
-				if (!z.poly || z.poly.length < 3) {
-					errors.push(`Zone ${z.id} (${z.type}) must have at least 3 points.`);
-				}
-			}
-		}
-
-		return errors;
-	});
+	readonly exportErrors = computed(() =>
+		getTrackExportErrors({
+			track: this.trackDef(),
+			hasTopDown: !!this.topDown(),
+			hasQuad: !!this.quadPx(),
+			hasSourceImage: !!this.srcImage(),
+		}),
+	);
 
 	readonly exportValid = computed(() => this.exportErrors().length === 0);
 
