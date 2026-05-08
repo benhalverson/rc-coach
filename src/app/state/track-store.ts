@@ -21,6 +21,7 @@ export class TrackStore {
 	readonly srcImage = signal<HTMLImageElement | null>(null);
 	readonly srcImageName = signal<string>('track.png');
 	readonly quadPx = signal<Pt[] | null>(null);
+	readonly quadError = signal<string | null>(null);
 
 	readonly topDown = signal<HTMLCanvasElement | null>(null);
 	readonly topDownDataUrl = signal<string | null>(null);
@@ -82,6 +83,16 @@ export class TrackStore {
 			this.heightMeters() > 0 &&
 			this.name().trim().length > 0,
 	);
+
+	readonly canGoAnnotateHint = computed<string | null>(() => {
+		if (this.canGoAnnotate()) return null;
+		const missing: string[] = [];
+		if (!this.topDown()) missing.push('top-down image');
+		if (!this.name().trim()) missing.push('track name');
+		if (this.widthMeters() <= 0) missing.push('positive width');
+		if (this.heightMeters() <= 0) missing.push('positive height');
+		return missing.length ? `Missing: ${missing.join(', ')}.` : null;
+	});
 
 	readonly trackDef = computed<TrackDef | null>(() => {
 		const top = this.topDown();
@@ -153,6 +164,7 @@ export class TrackStore {
 			URL.revokeObjectURL(url);
 			this.srcImage.set(img);
 			this.quadPx.set(null);
+			this.quadError.set(null);
 			this.topDown.set(null);
 			this.zones.set([]);
 			this.step.set('quad');
@@ -166,9 +178,9 @@ export class TrackStore {
 	 * @param rawPts four points picked on the source image (any order).
 	 */
 	async onQuad(rawPts: Pt[]) {
-		// const ordered = orderQuadTLTRBRBL(rawPts);
     const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
 		this.quadPx.set(orderedv2);
+		this.quadError.set(null);
 
 		const img = this.srcImage();
 		if (!img) return;
@@ -179,16 +191,25 @@ export class TrackStore {
 		const outH = this.topDownH();
 
 		let canvas: HTMLCanvasElement;
+		let warpFailed = false;
 		try {
 			canvas = this.cv.warpPerspective(img, orderedv2, outW, outH);
 		} catch (err) {
 			console.error('warpPerspective failed', err);
 			canvas = this.fallbackDraw(img, outW, outH);
+			warpFailed = true;
 		}
 
 		const blankAfterWarp = this.isMostlyBlankCanvas(canvas);
 		if (blankAfterWarp) {
 			canvas = this.fallbackDraw(img, outW, outH);
+			this.quadError.set(
+				'Warp produced a blank result — using a scaled fallback. Try moving the corner handles further apart.',
+			);
+		} else if (warpFailed) {
+			this.quadError.set(
+				'Perspective warp failed — using a scaled fallback. Check that all four corners are placed correctly.',
+			);
 		}
 
 		this.topDown.set(canvas);
@@ -202,6 +223,7 @@ export class TrackStore {
 		this.step.set('upload');
 		this.srcImage.set(null);
 		this.quadPx.set(null);
+		this.quadError.set(null);
 		this.topDown.set(null);
 		this.zones.set([]);
 		this.centerline.set([]);
@@ -209,6 +231,7 @@ export class TrackStore {
 		this.measurePt1.set(null);
 		this.measurePt2.set(null);
 		this.measureRealDist.set(0);
+		this.importError.set(null);
 	}
 
 	/**
@@ -314,6 +337,7 @@ export class TrackStore {
 	// Import session support
 	readonly importTopdownImg = signal<HTMLImageElement | null>(null);
 	readonly importTrack = signal<TrackDef | null>(null);
+	readonly importError = signal<string | null>(null);
 	readonly canImport = computed(
 		() => !!this.importTopdownImg() && !!this.importTrack(),
 	);
@@ -363,12 +387,14 @@ export class TrackStore {
 					!json.widthMeters ||
 					!json.heightMeters
 				) {
-					console.warn('Invalid track.json');
+					this.importError.set('Invalid track.json: missing required fields (topdownPx, widthMeters, heightMeters).');
 					return;
 				}
 				this.importTrack.set(json);
+				this.importError.set(null);
 			} catch (e) {
 				console.error('Failed to parse track.json', e);
+				this.importError.set('Failed to parse track.json — make sure it is a valid exported file.');
 			}
 		};
 		reader.readAsText(file);
@@ -402,6 +428,7 @@ export class TrackStore {
 
 		this.importTopdownImg.set(null);
 		this.importTrack.set(null);
+		this.importError.set(null);
 		this.step.set('annotate');
 	}
 
