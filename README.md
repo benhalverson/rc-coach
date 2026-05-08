@@ -77,6 +77,40 @@ Contains:
 
 ---
 
+## Local development commands
+
+Verified from the repo root with `pnpm 10.23.0`:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm test
+pnpm build
+pnpm start
+```
+
+- `pnpm install --frozen-lockfile` succeeds.
+- `pnpm test` succeeds with the current Angular/Vitest setup.
+- `pnpm build` succeeds and writes the SSR bundle to `dist/`.
+- `pnpm start` runs `ng serve` and starts the local dev server on port `4200`.
+- `pnpm lint` is currently unavailable because this repo does not define a `lint` script.
+
+### Cloudflare type generation
+
+```sh
+pnpm cf-typegen
+```
+
+`pnpm cf-typegen` runs `wrangler types`, but the current Wrangler version requires Node.js `>=22`.
+It failed in verification on Node.js `20.20.2` with:
+
+```text
+Wrangler requires at least Node.js v22.0.0. You are using v20.20.2.
+```
+
+Use Node.js 22 or newer when regenerating Cloudflare types locally.
+
+---
+
 ## Maintainer setup
 
 This repo uses the GitHub CLI for issue and PR maintenance. Check local auth before triage or release work:
