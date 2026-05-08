@@ -1,5 +1,5 @@
 import type { Vec2, Zone } from '../track-types';
-import type { CenterlineParams } from './centerline-params';
+import { poseAtArcLength, type CenterlineParams } from './centerline-params';
 
 /**
  * Track lateral limits as a function of arc-length.
@@ -44,7 +44,7 @@ export function extractTrackLimits(
 
 	for (let i = 0; i < numSamples; i++) {
 		const s = i * ds;
-		const { pos } = require('./centerline-params').poseAtArcLength(params, s);
+		const { pos } = poseAtArcLength(params, s);
 
 		// Find minimum distance to zone edges.
 		let minDistLeft = Infinity;
