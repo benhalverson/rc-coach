@@ -1,7 +1,8 @@
 import { computed, effect, Injectable, inject, signal } from '@angular/core';
-import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, type Pt } from '../geometry/geometry';
+import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, validateQuadTLTRBRBL, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import type { TrackDef, Vec2, Zone } from '../track-types';
+import { getTrackExportErrors, hasValidPositiveDimensions } from './track-validation';
 
 export type Step =
 	| 'scale'
@@ -21,6 +22,7 @@ export class TrackStore {
 	readonly srcImage = signal<HTMLImageElement | null>(null);
 	readonly srcImageName = signal<string>('track.png');
 	readonly quadPx = signal<Pt[] | null>(null);
+	readonly quadError = signal<string | null>(null);
 
 	readonly topDown = signal<HTMLCanvasElement | null>(null);
 	readonly warpError = signal<string | null>(null);
@@ -79,8 +81,7 @@ export class TrackStore {
 	readonly canGoAnnotate = computed(
 		() =>
 			!!this.topDown() &&
-			this.widthMeters() > 0 &&
-			this.heightMeters() > 0 &&
+			hasValidPositiveDimensions(this.widthMeters(), this.heightMeters()) &&
 			this.name().trim().length > 0,
 	);
 
@@ -105,33 +106,14 @@ export class TrackStore {
 		};
 	});
 
-	readonly exportErrors = computed(() => {
-		const errors: string[] = [];
-		const t = this.trackDef();
-		if (!t) {
-			errors.push('Top-down image or quad selection missing.');
-			return errors;
-		}
-
-		if (!t.name || t.name.trim().length === 0) {
-			errors.push('Track name is required.');
-		}
-		if (t.widthMeters <= 0 || t.heightMeters <= 0) {
-			errors.push('Track dimensions must be greater than 0.');
-		}
-
-		if (!t.zones || t.zones.length === 0) {
-			errors.push('At least one zone is required.');
-		} else {
-			for (const z of t.zones) {
-				if (!z.poly || z.poly.length < 3) {
-					errors.push(`Zone ${z.id} (${z.type}) must have at least 3 points.`);
-				}
-			}
-		}
-
-		return errors;
-	});
+	readonly exportErrors = computed(() =>
+		getTrackExportErrors({
+			track: this.trackDef(),
+			hasTopDown: !!this.topDown(),
+			hasQuad: !!this.quadPx(),
+			hasSourceImage: !!this.srcImage(),
+		}),
+	);
 
 	readonly exportValid = computed(() => this.exportErrors().length === 0);
 
@@ -154,6 +136,7 @@ export class TrackStore {
 			URL.revokeObjectURL(url);
 			this.srcImage.set(img);
 			this.quadPx.set(null);
+			this.quadError.set(null);
 			this.topDown.set(null);
 			this.zones.set([]);
 			this.step.set('quad');
@@ -163,17 +146,28 @@ export class TrackStore {
 
 	/**
 	 * Accept user-picked quad points and run perspective warp to generate `topDown`.
+	 * Validates the quad (4 points, convex, non-degenerate) before ordering and warping.
 	 * Ensures TL/TR/BR/BL ordering and falls back to simple draw if OpenCV fails.
 	 * @param rawPts four points picked on the source image (any order).
 	 */
 	async onQuad(rawPts: Pt[]) {
-		// const ordered = orderQuadTLTRBRBL(rawPts);
-    const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
-		this.quadPx.set(orderedv2);
-		this.warpError.set(null);
-
 		const img = this.srcImage();
 		if (!img) return;
+
+		// const ordered = orderQuadTLTRBRBL(rawPts);
+		const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
+
+		const w = img.naturalWidth || img.width;
+		const h = img.naturalHeight || img.height;
+		const validation = validateQuadTLTRBRBL(orderedv2, w, h);
+		if (!validation.ok) {
+			this.quadError.set(validation.reason);
+			return;
+		}
+		this.quadError.set(null);
+
+		this.quadPx.set(orderedv2);
+		this.warpError.set(null);
 
 		try {
 			await this.cv.ready();
@@ -214,6 +208,7 @@ export class TrackStore {
 		this.step.set('upload');
 		this.srcImage.set(null);
 		this.quadPx.set(null);
+		this.quadError.set(null);
 		this.topDown.set(null);
 		this.warpError.set(null);
 		this.zones.set([]);
@@ -467,7 +462,7 @@ export class TrackStore {
 		s.height = 32;
 
 		const sctx = s.getContext('2d', { willReadFrequently: true });
-		if (!sctx) return true;
+		if (!sctx) return false; // Cannot sample — assume not blank
 
 		sctx.drawImage(c, 0, 0, s.width, s.height);
 		const data = sctx.getImageData(0, 0, s.width, s.height).data;

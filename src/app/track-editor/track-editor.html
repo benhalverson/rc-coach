@@ -60,6 +60,13 @@
       </div>
     }
 
+    @if (quadError()) {
+      <div role="alert" aria-live="polite"
+        class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-red-300">
+        ⚠ {{ quadError() }}
+      </div>
+    }
+
     <div class="flex gap-2 pt-2">
       <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
         (click)="step.set('upload')">Back</button>
