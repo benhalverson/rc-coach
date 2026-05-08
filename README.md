@@ -75,6 +75,20 @@ Contains:
 
 ---
 
+## Maintainer setup
+
+This repo uses the GitHub CLI for issue and PR maintenance. Check local auth before triage or release work:
+
+```sh
+gh auth status
+gh auth login -h github.com
+gh repo view
+gh issue list --state open
+gh pr list --state open
+```
+
+---
+
 ## Roadmap
 
 - Centerline smoothing and editing tools beyond point add/drag/undo/clear
