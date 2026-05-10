@@ -1,5 +1,5 @@
 import { computed, effect, Injectable, inject, signal } from '@angular/core';
-import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, type Pt } from '../geometry/geometry';
+import { orderQuadTLTRBRBLv2, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import type { TrackDef, Vec2, Zone } from '../track-types';
 
@@ -178,7 +178,7 @@ export class TrackStore {
 	 * @param rawPts four points picked on the source image (any order).
 	 */
 	async onQuad(rawPts: Pt[]) {
-    const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
+		const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
 		this.quadPx.set(orderedv2);
 		this.quadError.set(null);
 
