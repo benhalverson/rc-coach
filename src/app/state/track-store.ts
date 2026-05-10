@@ -137,6 +137,7 @@ export class TrackStore {
 			this.srcImage.set(img);
 			this.quadPx.set(null);
 			this.quadError.set(null);
+			this.warpError.set(null);
 			this.topDown.set(null);
 			this.zones.set([]);
 			this.step.set('quad');
@@ -147,12 +148,14 @@ export class TrackStore {
 	/**
 	 * Accept user-picked quad points and run perspective warp to generate `topDown`.
 	 * Validates the quad (4 points, convex, non-degenerate) before ordering and warping.
-	 * Ensures TL/TR/BR/BL ordering and falls back to simple draw if OpenCV fails.
+	 * Ensures TL/TR/BR/BL ordering and surfaces OpenCV errors without advancing steps.
 	 * @param rawPts four points picked on the source image (any order).
 	 */
 	async onQuad(rawPts: Pt[]) {
 		const img = this.srcImage();
 		if (!img) return;
+
+		this.warpError.set(null);
 
 		// const ordered = orderQuadTLTRBRBL(rawPts);
 		const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
@@ -167,7 +170,6 @@ export class TrackStore {
 		this.quadError.set(null);
 
 		this.quadPx.set(orderedv2);
-		this.warpError.set(null);
 
 		try {
 			await this.cv.ready();

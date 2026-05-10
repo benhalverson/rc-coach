@@ -4,9 +4,12 @@ import {
 	inBound,
 	isConvexQuad,
 	isQuadValid,
+	normToPx,
 	orderQuadTLTRBRBL,
 	orderQuadTLTRBRBLv2,
+	pxToNorm,
 	quadArea,
+	rectPolyPx,
 	validateQuadTLTRBRBL,
 } from './geometry';
 import type { Pt } from './geometry';
@@ -17,6 +20,77 @@ const TR: Pt = { x: 400, y: 100 };
 const BR: Pt = { x: 400, y: 400 };
 const BL: Pt = { x: 100, y: 400 };
 const RECT = [TL, TR, BR, BL];
+
+// ─── rectPolyPx ───────────────────────────────────────────────────────────────
+
+describe('rectPolyPx', () => {
+	it('returns a 4-point axis-aligned rectangle from two corners', () => {
+		const poly = rectPolyPx({ x: 10, y: 20 }, { x: 50, y: 60 });
+
+		expect(poly).toHaveLength(4);
+		expect(poly[0]).toEqual({ x: 10, y: 20 }); // TL
+		expect(poly[1]).toEqual({ x: 50, y: 20 }); // TR
+		expect(poly[2]).toEqual({ x: 50, y: 60 }); // BR
+		expect(poly[3]).toEqual({ x: 10, y: 60 }); // BL
+	});
+
+	it('normalizes inverted corners correctly', () => {
+		const poly = rectPolyPx({ x: 50, y: 60 }, { x: 10, y: 20 });
+
+		expect(poly[0]).toEqual({ x: 10, y: 20 });
+		expect(poly[2]).toEqual({ x: 50, y: 60 });
+	});
+
+	it('returns a degenerate rectangle when both corners are the same point', () => {
+		const poly = rectPolyPx({ x: 30, y: 30 }, { x: 30, y: 30 });
+
+		expect(poly).toHaveLength(4);
+		for (const pt of poly) {
+			expect(pt).toEqual({ x: 30, y: 30 });
+		}
+	});
+});
+
+// ─── pxToNorm / normToPx ──────────────────────────────────────────────────────
+
+describe('pxToNorm', () => {
+	it('normalizes a pixel point to [0..1] range', () => {
+		expect(pxToNorm({ x: 100, y: 200 }, 400, 800)).toEqual([0.25, 0.25]);
+	});
+
+	it('returns [0, 0] for origin', () => {
+		expect(pxToNorm({ x: 0, y: 0 }, 400, 800)).toEqual([0, 0]);
+	});
+
+	it('returns [1, 1] for the far corner', () => {
+		expect(pxToNorm({ x: 400, y: 800 }, 400, 800)).toEqual([1, 1]);
+	});
+});
+
+describe('normToPx', () => {
+	it('converts normalized coords back to pixels', () => {
+		expect(normToPx([0.25, 0.25], 400, 800)).toEqual({ x: 100, y: 200 });
+	});
+
+	it('returns origin for [0, 0]', () => {
+		expect(normToPx([0, 0], 400, 800)).toEqual({ x: 0, y: 0 });
+	});
+
+	it('returns far corner for [1, 1]', () => {
+		expect(normToPx([1, 1], 400, 800)).toEqual({ x: 400, y: 800 });
+	});
+});
+
+describe('pxToNorm / normToPx round-trip', () => {
+	it('round-trips from pixel to normalized and back', () => {
+		const original: Pt = { x: 123, y: 456 };
+		const norm = pxToNorm(original, 1920, 1080);
+		const recovered = normToPx(norm, 1920, 1080);
+
+		expect(recovered.x).toBeCloseTo(original.x, 10);
+		expect(recovered.y).toBeCloseTo(original.y, 10);
+	});
+});
 
 // ─── dist2 ───────────────────────────────────────────────────────────────────
 
