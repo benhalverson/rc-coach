@@ -1,10 +1,9 @@
 <div class="mx-auto max-w-5xl p-4 space-y-4">
-  <div class="flex items-center gap-3">
+  <div class="flex flex-wrap items-center gap-3">
     <h1 class="text-xl font-semibold">Track Editor</h1>
     <div class="text-sm text-neutral-500">Step: {{ step() }}</div>
     <div class="ml-auto flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900" (click)="resetAll()">Reset
-        all</button>
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]" (click)="resetAll()">Reset all</button>
     </div>
   </div>
 
@@ -34,7 +33,7 @@
       </div>
 
       <button type="button"
-        class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 disabled:opacity-50"
+        class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 disabled:opacity-50 min-h-[44px]"
         [disabled]="!canImport()" (click)="applyImport()">
         Import session
       </button>
@@ -58,8 +57,8 @@
       </div>
     }
 
-    <div class="flex gap-2 pt-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2 pt-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('upload')">Back</button>
     </div>
   </section>
@@ -110,7 +109,7 @@
       </div>
 
       <div *ngIf="!measureMode() && topDownDataUrl()">
-        <button type="button" class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 w-full"
+        <button type="button" class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 w-full min-h-[44px]"
           (click)="measureMode.set(true)">
           Measure scale
         </button>
@@ -144,12 +143,12 @@
             Calculated: {{ ppm.toFixed(2) }} px/m
           </div>
 
-          <div class="flex gap-2 pt-2">
-            <button type="button" class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+          <div class="flex flex-wrap gap-2 pt-2">
+            <button type="button" class="rounded border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-800 min-h-[44px]"
               (click)="cancelMeasure()">
               Cancel
             </button>
-            <button type="button" class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800 disabled:opacity-50"
+            <button type="button" class="rounded border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50 min-h-[44px]"
               [disabled]="!pixelsPerMeter()" (click)="applyMeasure()">
               Apply scale
             </button>
@@ -158,11 +157,11 @@
       </div>
     </div>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('quad')">Back</button>
 
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50 min-h-[44px]"
         [disabled]="!canGoAnnotate()" (click)="step.set('annotate')">Next: annotate</button>
     </div>
   </section>
@@ -233,11 +232,11 @@
       </div>
     </div>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('scale')">Back</button>
 
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('centerline')">Next: centerline</button>
     </div>
   </section>
@@ -247,7 +246,7 @@
     <div class="text-neutral-500">Draw the racing line (centerline). Click to add points, drag to adjust.</div>
 
     <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-3 space-y-3">
-      <div class="flex items-center justify-between text-sm text-neutral-300">
+      <div class="flex flex-wrap items-center justify-between gap-y-1 text-sm text-neutral-300">
         <span>Points: {{ centerline().length }}</span>
         <span>Use undo/clear to refine</span>
       </div>
@@ -257,11 +256,11 @@
       </app-centerline-editor>
     </div>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('annotate')">Back</button>
 
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('export')">Next: export</button>
     </div>
   </section>
@@ -279,21 +278,21 @@
     </div>
 
     <div class="flex flex-wrap gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="downloadTopdownPng()">Download topdown.png</button>
 
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50 min-h-[44px]"
         [disabled]="!exportValid()" (click)="downloadTrackJson()">Download track.json</button>
 
-      <button class="rounded-lg border border-cyan-700 px-3 py-2 text-cyan-200 hover:bg-cyan-950 disabled:opacity-50"
+      <button class="rounded-lg border border-cyan-700 px-3 py-2 text-cyan-200 hover:bg-cyan-950 disabled:opacity-50 min-h-[44px]"
         [disabled]="!exportValid()" (click)="step.set('viewer')">Open viewer (no reupload)</button>
     </div>
 
     <pre class="overflow-auto rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300"
       *ngIf="trackDef() as t">{{ t | json }}</pre>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('annotate')">Back</button>
     </div>
   </section>
@@ -303,7 +302,7 @@
     <div class="text-neutral-500">Session viewer: using current topdown + zones without reuploading.</div>
 
     <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-      <div class="mb-2 flex items-center justify-between text-sm text-neutral-300">
+      <div class="mb-2 flex flex-wrap items-center justify-between gap-y-1 text-sm text-neutral-300">
         <span>{{ name() }} — {{ widthMeters().toFixed(2) }}m x {{ heightMeters().toFixed(2) }}m</span>
         <span>Zones: {{ zones().length }} • Centerline pts: {{ centerline().length }}</span>
       </div>
@@ -328,10 +327,10 @@
     <!-- Centerline Follower Demo -->
     <app-centerline-demo></app-centerline-demo>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('export')">Back</button>
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('annotate')">Edit zones</button>
     </div>
   </section>
