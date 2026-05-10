@@ -2,7 +2,12 @@ import { computed, effect, Injectable, inject, signal } from '@angular/core';
 import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, validateQuadTLTRBRBL, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import type { TrackDef, Vec2, Zone } from '../track-types';
-import { getTrackExportErrors, hasValidPositiveDimensions } from './track-validation';
+import { getTrackExportErrors } from './track-validation';
+
+/** Returns true only when v is a finite number greater than zero. */
+export function isValidDimension(v: unknown): v is number {
+	return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
 
 export type Step =
 	| 'scale'
@@ -57,8 +62,10 @@ export class TrackStore {
 	readonly pixelsPerMeter = computed(() => {
 		const pxDist = this.measurePixelDist();
 		const realDist = this.measureRealDist();
-		if (!pxDist || realDist <= 0) return null;
-		return pxDist / realDist;
+		if (!pxDist || !Number.isFinite(pxDist) || pxDist <= 0) return null;
+		if (!Number.isFinite(realDist) || realDist <= 0) return null;
+		const ppm = pxDist / realDist;
+		return Number.isFinite(ppm) && ppm > 0 ? ppm : null;
 	});
 
 	/**
@@ -80,9 +87,24 @@ export class TrackStore {
 	readonly canGoAnnotate = computed(
 		() =>
 			!!this.topDown() &&
-			hasValidPositiveDimensions(this.widthMeters(), this.heightMeters()) &&
+			this.scaleValid() &&
 			this.name().trim().length > 0,
 	);
+
+	readonly scaleErrors = computed(() => {
+		const errors: string[] = [];
+		const w = this.widthMeters();
+		const h = this.heightMeters();
+		if (!isValidDimension(w)) {
+			errors.push('Width must be a positive finite number.');
+		}
+		if (!isValidDimension(h)) {
+			errors.push('Height must be a positive finite number.');
+		}
+		return errors;
+	});
+
+	readonly scaleValid = computed(() => this.scaleErrors().length === 0);
 
 	readonly trackDef = computed<TrackDef | null>(() => {
 		const top = this.topDown();
@@ -236,6 +258,7 @@ export class TrackStore {
 
 		const w = top.width / ppm;
 		const h = top.height / ppm;
+		if (!isValidDimension(w) || !isValidDimension(h)) return;
 		this.widthMeters.set(w);
 		this.heightMeters.set(h);
 		this.measureMode.set(false);
@@ -355,8 +378,8 @@ export class TrackStore {
 				if (
 					!json ||
 					!json.topdownPx ||
-					!json.widthMeters ||
-					!json.heightMeters
+					!isValidDimension(json.widthMeters) ||
+					!isValidDimension(json.heightMeters)
 				) {
 					console.warn('Invalid track.json');
 					return;
