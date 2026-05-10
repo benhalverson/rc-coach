@@ -30,6 +30,7 @@ export class TrackEditor {
 	readonly srcImage = this.store.srcImage;
 	readonly srcImageName = this.store.srcImageName;
 	readonly quadPx = this.store.quadPx;
+	readonly quadError = this.store.quadError;
 	readonly topDown = this.store.topDown;
 	readonly topDownDataUrl = this.store.topDownDataUrl;
 	readonly topDownW = this.store.topDownW;

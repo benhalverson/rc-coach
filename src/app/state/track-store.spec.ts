@@ -1,5 +1,21 @@
 import { TestBed } from '@angular/core/testing';
+import { vi } from 'vitest';
+import { Opencv } from '../opencv';
 import { isValidDimension, TrackStore } from './track-store';
+
+function makeImage(w: number, h: number): HTMLImageElement {
+	const img = document.createElement('img');
+	Object.defineProperty(img, 'naturalWidth', { value: w, configurable: true });
+	Object.defineProperty(img, 'naturalHeight', { value: h, configurable: true });
+	return img;
+}
+
+function makeCanvas(w = 1600, h = 900): HTMLCanvasElement {
+	const c = document.createElement('canvas');
+	c.width = w;
+	c.height = h;
+	return c;
+}
 
 describe('isValidDimension', () => {
 	it('returns true for positive finite numbers', () => {
@@ -33,15 +49,149 @@ describe('isValidDimension', () => {
 	});
 });
 
-describe('TrackStore', () => {
+describe('TrackStore – quad validation', () => {
+	let store: TrackStore;
+	let warpSpy: ReturnType<typeof vi.fn>;
+
+	// A valid TL/TR/BR/BL quad well inside a 1600×900 image
+	const validQuad = [
+		{ x: 100, y: 100 },
+		{ x: 1500, y: 100 },
+		{ x: 1500, y: 800 },
+		{ x: 100, y: 800 },
+	];
+
+	beforeEach(() => {
+		warpSpy = vi.fn().mockReturnValue(makeCanvas());
+
+		TestBed.configureTestingModule({
+			providers: [
+				TrackStore,
+				{
+					provide: Opencv,
+					useValue: {
+						ready: vi.fn().mockResolvedValue(undefined),
+						warpPerspective: warpSpy,
+					},
+				},
+			],
+		});
+
+		store = TestBed.inject(TrackStore);
+
+		// Seed a source image so onQuad can proceed past the early-exit guard
+		store.srcImage.set(makeImage(1600, 900));
+		store.step.set('quad');
+	});
+
+	it('should be created', () => {
+		expect(store).toBeTruthy();
+	});
+
+	it('quadError starts as null', () => {
+		expect(store.quadError()).toBeNull();
+	});
+
+	it('sets quadError and stays on quad step when points are too close', async () => {
+		const tooCloseQuad = [
+			{ x: 100, y: 100 },
+			{ x: 105, y: 100 }, // only 5 px from first point
+			{ x: 1500, y: 800 },
+			{ x: 100, y: 800 },
+		];
+		await TestBed.runInInjectionContext(() => store.onQuad(tooCloseQuad));
+		expect(store.quadError()).toBeTruthy();
+		expect(store.step()).toBe('quad');
+	});
+
+	it('does NOT call OpenCV warpPerspective for an invalid quad', async () => {
+		const tooCloseQuad = [
+			{ x: 100, y: 100 },
+			{ x: 105, y: 100 },
+			{ x: 1500, y: 800 },
+			{ x: 100, y: 800 },
+		];
+		await TestBed.runInInjectionContext(() => store.onQuad(tooCloseQuad));
+		expect(warpSpy).not.toHaveBeenCalled();
+	});
+
+	it('sets quadError for a quad with a point outside image bounds', async () => {
+		// One point is beyond the 1600×900 image boundary
+		const outOfBounds = [
+			{ x: 100, y: 100 },
+			{ x: 1650, y: 100 }, // x > 1600
+			{ x: 1500, y: 800 },
+			{ x: 100, y: 800 },
+		];
+		await TestBed.runInInjectionContext(() => store.onQuad(outOfBounds));
+		expect(store.quadError()).toBeTruthy();
+		expect(store.step()).toBe('quad');
+	});
+
+	it('sets quadError for a degenerate (tiny area) quad', async () => {
+		const tiny = [
+			{ x: 100, y: 100 },
+			{ x: 150, y: 100 },
+			{ x: 150, y: 150 },
+			{ x: 100, y: 150 },
+		]; // area = 50×50 = 2500 px² < 5000 minimum
+		await TestBed.runInInjectionContext(() => store.onQuad(tiny));
+		expect(store.quadError()).toBeTruthy();
+		expect(store.step()).toBe('quad');
+	});
+
+	it('clears quadError and advances to scale step for a valid quad', async () => {
+		// Seed an error first
+		const bad = [
+			{ x: 100, y: 100 },
+			{ x: 105, y: 100 },
+			{ x: 1500, y: 800 },
+			{ x: 100, y: 800 },
+		];
+		await TestBed.runInInjectionContext(() => store.onQuad(bad));
+		expect(store.quadError()).toBeTruthy();
+
+		await TestBed.runInInjectionContext(() => store.onQuad(validQuad));
+		expect(store.quadError()).toBeNull();
+		expect(store.step()).toBe('scale');
+	});
+
+	it('calls OpenCV warpPerspective for a valid quad', async () => {
+		await TestBed.runInInjectionContext(() => store.onQuad(validQuad));
+		expect(warpSpy).toHaveBeenCalledOnce();
+	});
+
+	it('resetAll clears quadError', async () => {
+		const bad = [
+			{ x: 100, y: 100 },
+			{ x: 105, y: 100 },
+			{ x: 1500, y: 800 },
+			{ x: 100, y: 800 },
+		];
+		await TestBed.runInInjectionContext(() => store.onQuad(bad));
+		store.resetAll();
+		expect(store.quadError()).toBeNull();
+	});
+});
+
+describe('TrackStore – scale calibration validation', () => {
 	let store: TrackStore;
 
 	beforeEach(() => {
-		TestBed.configureTestingModule({});
+		TestBed.configureTestingModule({
+			providers: [
+				TrackStore,
+				{
+					provide: Opencv,
+					useValue: {
+						ready: vi.fn().mockResolvedValue(undefined),
+						warpPerspective: vi.fn().mockReturnValue(makeCanvas()),
+					},
+				},
+			],
+		});
 		store = TestBed.inject(TrackStore);
 	});
-
-	// ── scaleErrors / scaleValid ────────────────────────────────────────────
 
 	describe('scaleErrors', () => {
 		it('is empty with default valid dimensions', () => {
@@ -106,8 +256,6 @@ describe('TrackStore', () => {
 		});
 	});
 
-	// ── pixelsPerMeter ─────────────────────────────────────────────────────
-
 	describe('pixelsPerMeter', () => {
 		function setTwoPoints(x1: number, y1: number, x2: number, y2: number) {
 			store.measurePt1.set({ x: x1, y: y1 });
@@ -150,13 +298,10 @@ describe('TrackStore', () => {
 		});
 	});
 
-	// ── applyMeasure ───────────────────────────────────────────────────────
-
 	describe('applyMeasure', () => {
 		it('does not update dimensions when pixelsPerMeter is null', () => {
 			store.widthMeters.set(20);
 			store.heightMeters.set(12);
-			// pixelsPerMeter is null because no points are set
 			store.applyMeasure();
 			expect(store.widthMeters()).toBe(20);
 			expect(store.heightMeters()).toBe(12);
@@ -166,39 +311,34 @@ describe('TrackStore', () => {
 			store.measurePt1.set({ x: 0, y: 0 });
 			store.measurePt2.set({ x: 100, y: 0 });
 			store.measureRealDist.set(5);
-			// topDown signal is null
 			store.applyMeasure();
 			expect(store.widthMeters()).toBe(20);
 			expect(store.heightMeters()).toBe(12);
 		});
 	});
 
-	// ── exportErrors (dimension validation) ────────────────────────────────
-
 	describe('exportErrors dimension validation', () => {
 		it('contains dimension error when widthMeters is NaN', () => {
+			store.topDown.set(makeCanvas(1600, 900));
+			store.srcImage.set(makeImage(1600, 900));
+			store.quadPx.set([
+				{ x: 0, y: 0 },
+				{ x: 1, y: 0 },
+				{ x: 1, y: 1 },
+				{ x: 0, y: 1 },
+			]);
 			store.widthMeters.set(Number.NaN);
-			// trackDef requires topDown, quad and img; with those null it returns the missing error
-			const errors = store.exportErrors();
-			// either we get the missing-topdown error or the dimension error
-			expect(
-				errors.some(
-					(e) =>
-						e.includes('dimension') ||
-						e.includes('Top-down image or quad selection missing'),
-				),
-			).toBe(true);
+
+			expect(store.exportErrors()).toContain('Track dimensions must be greater than 0.');
 		});
 	});
-
-	// ── onImportTrackJsonFile (dimension validation) ────────────────────────
 
 	describe('onImportTrackJsonFile', () => {
 		function triggerImport(json: unknown) {
 			const content = JSON.stringify(json);
 
-			// Mock FileReader so readAsText synchronously fires onload
-			const originalFileReader = (globalThis as { FileReader?: unknown }).FileReader;
+			const originalFileReader = (globalThis as { FileReader?: unknown })
+				.FileReader;
 			const mockReader = {
 				result: content,
 				onload: null as (() => void) | null,
@@ -275,3 +415,4 @@ describe('TrackStore', () => {
 		});
 	});
 });
+
