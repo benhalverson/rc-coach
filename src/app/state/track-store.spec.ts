@@ -136,7 +136,6 @@ describe('TrackStore – quad validation', () => {
 		store.resetAll();
 		expect(store.quadError()).toBeNull();
 	});
-
 	it('sets warpError and stays on quad step when cv.ready() rejects', async () => {
 		readySpy.mockRejectedValue(new Error('Failed to load /assets/opencv/opencv.js'));
 		await TestBed.runInInjectionContext(() => store.onQuad(validQuad));
