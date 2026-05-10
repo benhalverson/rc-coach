@@ -30,6 +30,7 @@ export class TrackEditor {
 	readonly srcImage = this.store.srcImage;
 	readonly srcImageName = this.store.srcImageName;
 	readonly quadPx = this.store.quadPx;
+	readonly quadError = this.store.quadError;
 	readonly topDown = this.store.topDown;
 	readonly topDownDataUrl = this.store.topDownDataUrl;
 	readonly topDownW = this.store.topDownW;
@@ -47,6 +48,8 @@ export class TrackEditor {
 	readonly measureRealDist = this.store.measureRealDist;
 	readonly pixelsPerMeter = this.store.pixelsPerMeter;
 	readonly canGoAnnotate = this.store.canGoAnnotate;
+	readonly scaleErrors = this.store.scaleErrors;
+	readonly scaleValid = this.store.scaleValid;
 	readonly trackDef = this.store.trackDef;
 	readonly exportErrors = this.store.exportErrors;
 	readonly exportValid = this.store.exportValid;

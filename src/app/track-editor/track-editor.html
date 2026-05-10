@@ -50,6 +50,13 @@
     <!-- Replace with your modern quad picker -->
     <app-quad-picker *ngIf="srcImage()" [image]="srcImage()!" (quad)="onQuad($event)"></app-quad-picker>
 
+    @if (quadError()) {
+      <div role="alert" aria-live="polite"
+        class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-red-300">
+        ⚠ {{ quadError() }}
+      </div>
+    }
+
     <div class="flex flex-wrap gap-2 pt-2">
       <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('upload')">Back</button>
@@ -69,18 +76,30 @@
 
       <label class="space-y-1">
         <div class="text-sm text-neutral-500">Plane width (m)</div>
-        <input type="number" step="0.01"
+        <input type="number" step="0.01" min="0.01"
           class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-          [value]="widthMeters()" (input)="widthMeters.set($any($event.target).valueAsNumber || 0)" />
+          [value]="widthMeters()" (input)="widthMeters.set($any($event.target).valueAsNumber)" />
       </label>
 
       <label class="space-y-1">
         <div class="text-sm text-neutral-500">Plane height (m)</div>
-        <input type="number" step="0.01"
+        <input type="number" step="0.01" min="0.01"
           class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-          [value]="heightMeters()" (input)="heightMeters.set($any($event.target).valueAsNumber || 0)" />
+          [value]="heightMeters()" (input)="heightMeters.set($any($event.target).valueAsNumber)" />
       </label>
     </div>
+
+    @if (scaleErrors().length) {
+    <div role="alert" aria-live="polite"
+      class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-neutral-100">
+      <div class="font-semibold mb-1 text-red-300">Fix these before continuing:</div>
+      <ul class="list-disc pl-5">
+        @for (err of scaleErrors(); track err) {
+          <li>{{ err }}</li>
+        }
+      </ul>
+    </div>
+    }
 
     <div class="rounded-xl border border-neutral-800 p-2 space-y-2">
       <div *ngIf="!measureMode()">

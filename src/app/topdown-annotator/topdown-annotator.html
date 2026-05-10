@@ -5,12 +5,12 @@
 			<span class="font-medium">Draw mode:</span>
 			<label class="inline-flex items-center gap-1 min-h-[44px]">
 				<input type="radio" name="draw-mode" value="rect" [checked]="drawMode() === 'rect'"
-					(change)="drawMode.set('rect')" />
+					(change)="setDrawMode('rect')" />
 				Rectangle
 			</label>
 			<label class="inline-flex items-center gap-1 min-h-[44px]">
 				<input type="radio" name="draw-mode" value="polygon" [checked]="drawMode() === 'polygon'"
-					(change)="drawMode.set('polygon')" />
+					(change)="setDrawMode('polygon')" />
 				Polygon
 			</label>
 		</div>

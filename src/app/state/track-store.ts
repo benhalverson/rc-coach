@@ -1,7 +1,13 @@
 import { computed, effect, Injectable, inject, signal } from '@angular/core';
-import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, type Pt } from '../geometry/geometry';
+import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, validateQuadTLTRBRBL, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import type { TrackDef, Vec2, Zone } from '../track-types';
+import { getTrackExportErrors } from './track-validation';
+
+/** Returns true only when v is a finite number greater than zero. */
+export function isValidDimension(v: unknown): v is number {
+	return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
 
 export type Step =
 	| 'scale'
@@ -21,6 +27,7 @@ export class TrackStore {
 	readonly srcImage = signal<HTMLImageElement | null>(null);
 	readonly srcImageName = signal<string>('track.png');
 	readonly quadPx = signal<Pt[] | null>(null);
+	readonly quadError = signal<string | null>(null);
 
 	readonly topDown = signal<HTMLCanvasElement | null>(null);
 	readonly topDownDataUrl = signal<string | null>(null);
@@ -55,8 +62,10 @@ export class TrackStore {
 	readonly pixelsPerMeter = computed(() => {
 		const pxDist = this.measurePixelDist();
 		const realDist = this.measureRealDist();
-		if (!pxDist || realDist <= 0) return null;
-		return pxDist / realDist;
+		if (!pxDist || !Number.isFinite(pxDist) || pxDist <= 0) return null;
+		if (!Number.isFinite(realDist) || realDist <= 0) return null;
+		const ppm = pxDist / realDist;
+		return Number.isFinite(ppm) && ppm > 0 ? ppm : null;
 	});
 
 	/**
@@ -78,10 +87,24 @@ export class TrackStore {
 	readonly canGoAnnotate = computed(
 		() =>
 			!!this.topDown() &&
-			this.widthMeters() > 0 &&
-			this.heightMeters() > 0 &&
+			this.scaleValid() &&
 			this.name().trim().length > 0,
 	);
+
+	readonly scaleErrors = computed(() => {
+		const errors: string[] = [];
+		const w = this.widthMeters();
+		const h = this.heightMeters();
+		if (!isValidDimension(w)) {
+			errors.push('Width must be a positive finite number.');
+		}
+		if (!isValidDimension(h)) {
+			errors.push('Height must be a positive finite number.');
+		}
+		return errors;
+	});
+
+	readonly scaleValid = computed(() => this.scaleErrors().length === 0);
 
 	readonly trackDef = computed<TrackDef | null>(() => {
 		const top = this.topDown();
@@ -104,33 +127,14 @@ export class TrackStore {
 		};
 	});
 
-	readonly exportErrors = computed(() => {
-		const errors: string[] = [];
-		const t = this.trackDef();
-		if (!t) {
-			errors.push('Top-down image or quad selection missing.');
-			return errors;
-		}
-
-		if (!t.name || t.name.trim().length === 0) {
-			errors.push('Track name is required.');
-		}
-		if (t.widthMeters <= 0 || t.heightMeters <= 0) {
-			errors.push('Track dimensions must be greater than 0.');
-		}
-
-		if (!t.zones || t.zones.length === 0) {
-			errors.push('At least one zone is required.');
-		} else {
-			for (const z of t.zones) {
-				if (!z.poly || z.poly.length < 3) {
-					errors.push(`Zone ${z.id} (${z.type}) must have at least 3 points.`);
-				}
-			}
-		}
-
-		return errors;
-	});
+	readonly exportErrors = computed(() =>
+		getTrackExportErrors({
+			track: this.trackDef(),
+			hasTopDown: !!this.topDown(),
+			hasQuad: !!this.quadPx(),
+			hasSourceImage: !!this.srcImage(),
+		}),
+	);
 
 	readonly exportValid = computed(() => this.exportErrors().length === 0);
 
@@ -153,6 +157,7 @@ export class TrackStore {
 			URL.revokeObjectURL(url);
 			this.srcImage.set(img);
 			this.quadPx.set(null);
+			this.quadError.set(null);
 			this.topDown.set(null);
 			this.zones.set([]);
 			this.step.set('quad');
@@ -162,16 +167,27 @@ export class TrackStore {
 
 	/**
 	 * Accept user-picked quad points and run perspective warp to generate `topDown`.
+	 * Validates the quad (4 points, convex, non-degenerate) before ordering and warping.
 	 * Ensures TL/TR/BR/BL ordering and falls back to simple draw if OpenCV fails.
 	 * @param rawPts four points picked on the source image (any order).
 	 */
 	async onQuad(rawPts: Pt[]) {
-		// const ordered = orderQuadTLTRBRBL(rawPts);
-    const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
-		this.quadPx.set(orderedv2);
-
 		const img = this.srcImage();
 		if (!img) return;
+
+		// const ordered = orderQuadTLTRBRBL(rawPts);
+		const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
+
+		const w = img.naturalWidth || img.width;
+		const h = img.naturalHeight || img.height;
+		const validation = validateQuadTLTRBRBL(orderedv2, w, h);
+		if (!validation.ok) {
+			this.quadError.set(validation.reason);
+			return;
+		}
+		this.quadError.set(null);
+
+		this.quadPx.set(orderedv2);
 
 		await this.cv.ready();
 
@@ -202,6 +218,7 @@ export class TrackStore {
 		this.step.set('upload');
 		this.srcImage.set(null);
 		this.quadPx.set(null);
+		this.quadError.set(null);
 		this.topDown.set(null);
 		this.zones.set([]);
 		this.centerline.set([]);
@@ -241,6 +258,7 @@ export class TrackStore {
 
 		const w = top.width / ppm;
 		const h = top.height / ppm;
+		if (!isValidDimension(w) || !isValidDimension(h)) return;
 		this.widthMeters.set(w);
 		this.heightMeters.set(h);
 		this.measureMode.set(false);
@@ -360,11 +378,20 @@ export class TrackStore {
 				if (
 					!json ||
 					!json.topdownPx ||
-					!json.widthMeters ||
-					!json.heightMeters
+					!isValidDimension(json.widthMeters) ||
+					!isValidDimension(json.heightMeters)
 				) {
 					console.warn('Invalid track.json');
 					return;
+				}
+				// Discard zones that are structurally invalid (< 3 points)
+				if (Array.isArray(json.zones)) {
+					json.zones = json.zones.filter(
+						(z: Zone) =>
+							z && z.id && z.type && Array.isArray(z.poly) && z.poly.length >= 3,
+					);
+				} else {
+					json.zones = [];
 				}
 				this.importTrack.set(json);
 			} catch (e) {
@@ -377,6 +404,7 @@ export class TrackStore {
 	/**
 	 * Apply an imported session (PNG + JSON) to the editor state.
 	 * Rehydrates name, dimensions, zones, centerline, and creates the `topDown` canvas.
+	 * Zones with fewer than 3 polygon points are silently discarded.
 	 */
 	applyImport() {
 		const img = this.importTopdownImg();
@@ -386,7 +414,11 @@ export class TrackStore {
 		this.name.set(t.name);
 		this.widthMeters.set(t.widthMeters);
 		this.heightMeters.set(t.heightMeters);
-		this.zones.set(t.zones ?? []);
+		// Filter out any malformed zones before storing
+		const validZones = (t.zones ?? []).filter(
+			(z) => z && z.id && z.type && Array.isArray(z.poly) && z.poly.length >= 3,
+		);
+		this.zones.set(validZones);
 		this.centerline.set(t.centerline ?? []);
 		this.srcImageName.set(t.import?.srcImageName ?? this.srcImageName());
 		this.quadPx.set(t.import?.srcQuadPx ?? null);
