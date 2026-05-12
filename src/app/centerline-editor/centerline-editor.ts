@@ -37,8 +37,14 @@ export class CenterlineEditor {
 	constructor() {
 		afterNextRender(() => {
 			runInInjectionContext(this.injector, () => {
+				// Sync pts from lineIn/topdown only when those external inputs change.
+				// Reading pts here would cause this effect to re-run on every user
+				// edit, overwriting the live drawing state with stale input data.
 				effect(() => {
 					this.syncFromInput();
+				});
+				// Redraw whenever pts or topdown changes (user edits or new image).
+				effect(() => {
 					this.redraw();
 				});
 			});
@@ -79,6 +85,8 @@ export class CenterlineEditor {
 		if (idx !== null) {
 			this.draggingIdx.set(null);
 			this.canvasRef().nativeElement.releasePointerCapture(ev.pointerId);
+			// Emit final position after drag completes.
+			this.emitLine();
 		}
 	}
 
@@ -97,6 +105,8 @@ export class CenterlineEditor {
 	private syncFromInput() {
 		const top = this.topdown();
 		if (!top) return;
+		// Do not overwrite the live drawing state while the user is dragging.
+		if (this.draggingIdx() !== null) return;
 		const src = this.lineIn();
 		this.pts.set(
 			src.map(([x, y]) => ({ x: x * top.width, y: y * top.height })),

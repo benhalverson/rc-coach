@@ -67,7 +67,9 @@
 		</div>
 	</div>
 
-	<p class="info" *ngIf="!centerlineParams()">
+	@if (!centerlineParams()) {
+	<p class="info">
 		Centerline not parameterized. Annotate and export a track first.
 	</p>
+	}
 </div>
