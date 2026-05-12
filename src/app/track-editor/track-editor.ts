@@ -5,6 +5,7 @@ import {
 	inject,
 	viewChild,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
@@ -22,6 +23,7 @@ import type { Vec2, ZoneType } from '../track-types';
 		TopdownAnnotator,
 		CenterlineEditor,
 		CenterlineDemoComponent,
+		RouterLink,
 	],
 	templateUrl: './track-editor.html',
 	styleUrl: './track-editor.css',

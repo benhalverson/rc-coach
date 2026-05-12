@@ -1,4 +1,5 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { TrackEditor } from './track-editor';
 
@@ -9,6 +10,7 @@ describe('TrackEditor', () => {
 	beforeEach(async () => {
 		await TestBed.configureTestingModule({
 			imports: [TrackEditor],
+			providers: [provideRouter([])],
 		}).compileComponents();
 
 		fixture = TestBed.createComponent(TrackEditor);

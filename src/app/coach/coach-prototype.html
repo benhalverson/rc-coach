@@ -1,0 +1,241 @@
+<main class="mx-auto max-w-6xl p-4 space-y-4">
+  <header class="flex flex-wrap items-center gap-3">
+    <div>
+      <h1 class="text-xl font-semibold text-neutral-100">Setup Coach</h1>
+      <p class="text-sm text-neutral-400">Symptom survey recommendations</p>
+    </div>
+    <a routerLink="/"
+      class="ml-auto rounded-lg border border-neutral-700 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-900 min-h-[44px] inline-flex items-center">
+      Track editor
+    </a>
+  </header>
+
+  <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
+    <section class="space-y-4 rounded-xl border border-neutral-800 p-4">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label class="space-y-1">
+          <span class="text-sm text-neutral-400">Symptom</span>
+          <select class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            [value]="draftSymptom()" (change)="setDraftSymptom($any($event.target).value)">
+            @for (option of symptomOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="space-y-1">
+          <span class="text-sm text-neutral-400">Phase</span>
+          <select class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            [value]="draftPhase()" (change)="setDraftPhase($any($event.target).value)">
+            @for (option of phaseOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="space-y-1">
+          <span class="text-sm text-neutral-400">Severity</span>
+          <select class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            [value]="draftSeverity()" (change)="setDraftSeverity($any($event.target).value)">
+            @for (option of severityOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="space-y-1">
+          <span class="text-sm text-neutral-400">Section</span>
+          <input class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            placeholder="Turn 3" [value]="draftSectionId()"
+            (input)="draftSectionId.set($any($event.target).value)" />
+        </label>
+      </div>
+
+      <label class="block space-y-1">
+        <span class="text-sm text-neutral-400">Note</span>
+        <input class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+          placeholder="Only on power" [value]="draftNote()"
+          (input)="draftNote.set($any($event.target).value)" />
+      </label>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <label class="space-y-1">
+          <span class="text-sm text-neutral-400">Grip</span>
+          <select class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            [value]="grip()" (change)="setGrip($any($event.target).value)">
+            <option value="">Any</option>
+            @for (option of gripOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="space-y-1">
+          <span class="text-sm text-neutral-400">Bumpiness</span>
+          <select class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            [value]="bumpiness()" (change)="setBumpiness($any($event.target).value)">
+            <option value="">Any</option>
+            @for (option of bumpinessOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="space-y-1">
+          <span class="text-sm text-neutral-400">Layout</span>
+          <select class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+            [value]="layout()" (change)="setLayout($any($event.target).value)">
+            <option value="">Any</option>
+            @for (option of layoutOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <fieldset class="space-y-2">
+        <legend class="text-sm text-neutral-400">Features</legend>
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          @for (option of featureOptions; track option.value) {
+            <label class="flex min-h-[44px] items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-200">
+              <input type="checkbox" class="accent-cyan-500" [checked]="hasFeature(option.value)"
+                (change)="toggleFeature(option.value, $any($event.target).checked)" />
+              <span>{{ option.label }}</span>
+            </label>
+          }
+        </div>
+      </fieldset>
+
+      <div class="flex flex-wrap gap-2">
+        <button type="button"
+          class="rounded-lg border border-cyan-700 bg-cyan-950/50 px-3 py-2 text-sm text-cyan-100 hover:bg-cyan-900/70 min-h-[44px]"
+          (click)="addReport()">
+          Add symptom
+        </button>
+        <button type="button"
+          class="rounded-lg border border-neutral-700 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-900 disabled:opacity-50 min-h-[44px]"
+          [disabled]="reports().length === 0" (click)="clearReports()">
+          Clear
+        </button>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold text-neutral-100">Reports</h2>
+          <span class="text-xs text-neutral-500">{{ reports().length }} total</span>
+        </div>
+
+        @if (reports().length === 0) {
+          <div class="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-500">
+            No symptom reports added.
+          </div>
+        } @else {
+          <div class="space-y-2">
+            @for (report of reports(); track $index) {
+              <article class="rounded-lg border border-neutral-800 bg-neutral-950 p-3">
+                <div class="flex flex-wrap items-start gap-2">
+                  <div class="min-w-0 flex-1">
+                    <div class="font-medium text-neutral-100">
+                      {{ labelForSymptom(report.symptom) }} · {{ labelForPhase(report.phase) }}
+                    </div>
+                    <div class="mt-1 text-xs text-neutral-400">
+                      {{ labelForSeverity(report.severity ?? 2) }}
+                      @if (report.sectionId) {
+                        <span> · {{ report.sectionId }}</span>
+                      }
+                    </div>
+                    @if (report.note) {
+                      <p class="mt-2 text-sm text-neutral-300">{{ report.note }}</p>
+                    }
+                  </div>
+                  <button type="button"
+                    class="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-200 hover:bg-neutral-900 min-h-[32px]"
+                    (click)="removeReport($index)">
+                    Remove
+                  </button>
+                </div>
+              </article>
+            }
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="space-y-4">
+      @if (recommendationResult().conflicts.length) {
+        <div class="rounded-xl border border-amber-700 bg-amber-950/30 p-4" role="alert">
+          <h2 class="text-sm font-semibold text-amber-100">Conflicts</h2>
+          <div class="mt-2 space-y-2">
+            @for (conflict of recommendationResult().conflicts; track conflict.setupKey) {
+              <p class="text-sm text-amber-200">{{ conflict.message }}</p>
+            }
+          </div>
+        </div>
+      }
+
+      <div class="rounded-xl border border-neutral-800 p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold text-neutral-100">Recommendations</h2>
+          <span class="text-xs text-neutral-500">{{ recommendationResult().recommendations.length }} total</span>
+        </div>
+
+        @if (reports().length === 0) {
+          <div class="mt-3 rounded-lg border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-500">
+            Add a symptom report to see setup recommendations.
+          </div>
+        } @else if (recommendationResult().recommendations.length === 0) {
+          <div class="mt-3 rounded-lg border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-500">
+            No setup recommendations match these reports.
+          </div>
+        } @else {
+          <div class="mt-4 space-y-4">
+            @for (group of recommendationResult().groups; track group.id) {
+              <section class="space-y-3">
+                <h3 class="text-sm font-semibold text-neutral-200">{{ group.title }}</h3>
+                <div class="space-y-3">
+                  @for (rec of group.recommendations; track rec.id) {
+                    <article class="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+                      <div class="flex flex-wrap items-start gap-3">
+                        <div class="min-w-0 flex-1">
+                          <h4 class="font-semibold text-neutral-100">{{ rec.title }}</h4>
+                          <div class="mt-1 flex flex-wrap gap-2 text-xs text-neutral-400">
+                            <span>{{ rec.area }}</span>
+                            <span>{{ rec.setupKey }}</span>
+                            <span>{{ rec.direction }}</span>
+                          </div>
+                        </div>
+                        <span class="rounded-full border px-2 py-1 text-xs font-medium" [ngClass]="priorityClasses(rec.priority)">
+                          {{ rec.priority }}
+                        </span>
+                      </div>
+
+                      <p class="mt-3 text-sm text-neutral-300">{{ rec.reasoning }}</p>
+
+                      <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-neutral-200">
+                        @for (action of rec.actions; track action) {
+                          <li>{{ action }}</li>
+                        }
+                      </ul>
+
+                      <div class="mt-3 border-t border-neutral-800 pt-3 text-xs text-neutral-500">
+                        Evidence:
+                        @for (match of rec.matchedReports; track match.ruleId + match.phase + $index) {
+                          <span class="ml-1">
+                            {{ labelForSymptom(match.symptom) }} / {{ labelForPhase(match.phase) }} / {{ labelForSeverity(match.severity) }}
+                            @if (!$last) {
+                              <span>;</span>
+                            }
+                          </span>
+                        }
+                      </div>
+                    </article>
+                  }
+                </div>
+              </section>
+            }
+          </div>
+        }
+      </div>
+    </section>
+  </div>
+</main>
