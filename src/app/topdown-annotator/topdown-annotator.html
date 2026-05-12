@@ -3,6 +3,10 @@
 		<!-- Draw mode selection -->
 		<div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
 			<span class="font-medium">Draw mode:</span>
+			<label class="inline-flex items-center gap-1 min-h-[44px] text-xs">
+				<input type="checkbox" [checked]="snapEnabled()" (change)="snapEnabled.set($any($event.target).checked)" />
+				Snap points
+			</label>
 			<label class="inline-flex items-center gap-1 min-h-[44px]">
 				<input type="radio" name="draw-mode" value="rect" [checked]="drawMode() === 'rect'"
 					(change)="setDrawMode('rect')" />
@@ -36,6 +40,11 @@
 		@if (selectedZoneId()) {
 		<div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
 			<span class="font-medium">Selected zone:</span>
+			@if (selectedVertexIndex() !== null) {
+				<span class="rounded border border-amber-500/40 bg-amber-900/20 px-2 py-1 text-xs text-amber-200">
+					Vertex {{ selectedVertexIndex()! + 1 }} / {{ selectedZoneVertexCount() }}
+				</span>
+			}
 			<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 min-h-[44px]"
 				(click)="changeSelectedType('jump')">
 				Set Jump
@@ -98,6 +107,6 @@
 		} @else {
 		<p>Polygon mode: Click to add vertices. Click "Finish" when done (min 3 points).</p>
 		}
-		<p>Click any zone to select it. Selected zones can be edited or deleted.</p>
+		<p>Click any zone to select it. Click near a selected edge to insert a vertex, then drag vertices to refine.</p>
 	</div>
 </div>

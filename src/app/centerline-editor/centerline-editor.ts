@@ -2,6 +2,7 @@ import {
 	afterNextRender,
 	ChangeDetectionStrategy,
 	Component,
+	computed,
 	ElementRef,
 	effect,
 	Injector,
@@ -12,6 +13,7 @@ import {
 	signal,
 	viewChild,
 } from '@angular/core';
+import { deriveCenterline } from '../geometry/derived-centerline';
 import { pxToNorm } from '../geometry/geometry';
 import type { Vec2 } from '../track-types';
 
@@ -27,11 +29,24 @@ export class CenterlineEditor {
 	readonly topdown = input.required<HTMLCanvasElement>();
 	readonly lineIn = input<Vec2[]>([]);
 	readonly lineOut = output<Vec2[]>();
+	readonly snapEnabled = signal(true);
+	readonly smoothPreviewEnabled = signal(true);
+	readonly smoothPreviewSamples = signal(12);
+	readonly simplifyTolerancePx = signal(4);
+	readonly selectedPointIndex = signal<number | null>(null);
+	readonly pointCount = computed(() => this.pts().length);
+	readonly selectedPoint = computed(() => {
+		const idx = this.selectedPointIndex();
+		if (idx === null) return null;
+		return this.pts()[idx] ?? null;
+	});
 
 	private readonly canvasRef =
 		viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
 	private readonly pts = signal<Pt[]>([]);
 	private readonly draggingIdx = signal<number | null>(null);
+	private readonly history = signal<Pt[][]>([]);
+	private readonly historyIndex = signal(-1);
 	private readonly injector = inject(Injector);
 
 	constructor() {
@@ -57,14 +72,20 @@ export class CenterlineEditor {
 		if (!pt) return;
 		const idx = this.findNearest(pt, 10);
 		if (idx !== null) {
+			this.pushHistory();
 			this.draggingIdx.set(idx);
+			this.selectedPointIndex.set(idx);
 			this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
 			return;
 		}
 
 		// add new point
-		this.pts.update((ps) => [...ps, pt]);
+		this.pushHistory();
+		const next = this.applySnapAndClamp(pt);
+		this.pts.update((ps) => [...ps, next]);
+		this.selectedPointIndex.set(this.pts().length - 1);
 		this.emitLine();
+		this.saveCurrentToHistory();
 		this.redraw();
 	}
 
@@ -73,9 +94,9 @@ export class CenterlineEditor {
 		if (idx === null) return;
 		const pt = this.toCanvasPoint(ev);
 		if (!pt) return;
-		const { width, height } = this.canvasRef().nativeElement;
-		const clamped = { x: clamp(pt.x, 0, width), y: clamp(pt.y, 0, height) };
+		const clamped = this.applySnapAndClamp(pt);
 		this.pts.update((ps) => ps.map((p, i) => (i === idx ? clamped : p)));
+		this.selectedPointIndex.set(idx);
 		this.emitLine();
 		this.redraw();
 	}
@@ -87,18 +108,120 @@ export class CenterlineEditor {
 			this.canvasRef().nativeElement.releasePointerCapture(ev.pointerId);
 			// Emit final position after drag completes.
 			this.emitLine();
+			this.saveCurrentToHistory();
 		}
 	}
 
 	undoLast() {
-		this.pts.update((ps) => ps.slice(0, -1));
+		this.undoChange();
+	}
+
+	clearLine() {
+		if (this.pts().length === 0) return;
+		this.pushHistory();
+		this.pts.set([]);
+		this.selectedPointIndex.set(null);
+		this.emitLine();
+		this.saveCurrentToHistory();
+		this.redraw();
+	}
+
+	undoChange() {
+		const idx = this.historyIndex();
+		if (idx <= 0) return;
+		const nextIndex = idx - 1;
+		this.historyIndex.set(nextIndex);
+		this.pts.set(clonePts(this.history()[nextIndex] ?? []));
+		this.selectedPointIndex.set(null);
 		this.emitLine();
 		this.redraw();
 	}
 
-	clearLine() {
-		this.pts.set([]);
+	redoChange() {
+		const idx = this.historyIndex();
+		const all = this.history();
+		if (idx < 0 || idx >= all.length - 1) return;
+		const nextIndex = idx + 1;
+		this.historyIndex.set(nextIndex);
+		this.pts.set(clonePts(all[nextIndex] ?? []));
+		this.selectedPointIndex.set(null);
 		this.emitLine();
+		this.redraw();
+	}
+
+	simplifyLine() {
+		const points = this.pts();
+		if (points.length < 3) return;
+		const simplified = simplifyPolyline(points, this.simplifyTolerancePx());
+		if (simplified.length === points.length) return;
+		this.pushHistory();
+		this.pts.set(simplified);
+		this.selectedPointIndex.set(null);
+		this.emitLine();
+		this.saveCurrentToHistory();
+		this.redraw();
+	}
+
+	deleteSelectedPoint() {
+		const idx = this.selectedPointIndex();
+		if (idx === null) return;
+		const points = this.pts();
+		if (idx < 0 || idx >= points.length) return;
+		this.pushHistory();
+		this.pts.set(points.filter((_, i) => i !== idx));
+		this.selectedPointIndex.set(null);
+		this.emitLine();
+		this.saveCurrentToHistory();
+		this.redraw();
+	}
+
+	nudgeSelectedPoint(dx: number, dy: number) {
+		const idx = this.selectedPointIndex();
+		if (idx === null) return;
+		const points = this.pts();
+		if (idx < 0 || idx >= points.length) return;
+		this.pushHistory();
+		const next = this.applySnapAndClamp({
+			x: points[idx].x + dx,
+			y: points[idx].y + dy,
+		});
+		this.pts.set(points.map((p, i) => (i === idx ? next : p)));
+		this.emitLine();
+		this.saveCurrentToHistory();
+		this.redraw();
+	}
+
+	selectPrevPoint() {
+		const total = this.pts().length;
+		if (total === 0) return;
+		const idx = this.selectedPointIndex();
+		this.selectedPointIndex.set(idx === null ? 0 : (idx - 1 + total) % total);
+	}
+
+	selectNextPoint() {
+		const total = this.pts().length;
+		if (total === 0) return;
+		const idx = this.selectedPointIndex();
+		this.selectedPointIndex.set(idx === null ? 0 : (idx + 1) % total);
+	}
+
+	canUndo() {
+		return this.historyIndex() > 0;
+	}
+
+	canRedo() {
+		const idx = this.historyIndex();
+		return idx >= 0 && idx < this.history().length - 1;
+	}
+
+	onSmoothPreviewSamplesChange(rawValue: string) {
+		const value = Number(rawValue);
+		this.smoothPreviewSamples.set(clamp(Math.round(value), 3, 30));
+		this.redraw();
+	}
+
+	onSmoothPreviewToggle(enabled: boolean) {
+		this.smoothPreviewEnabled.set(enabled);
 		this.redraw();
 	}
 
@@ -108,9 +231,17 @@ export class CenterlineEditor {
 		// Do not overwrite the live drawing state while the user is dragging.
 		if (this.draggingIdx() !== null) return;
 		const src = this.lineIn();
-		this.pts.set(
-			src.map(([x, y]) => ({ x: x * top.width, y: y * top.height })),
-		);
+		const points = src.map(([x, y]) => ({ x: x * top.width, y: y * top.height }));
+		this.pts.set(points);
+		this.resetHistory(points);
+		if (points.length === 0) {
+			this.selectedPointIndex.set(null);
+		} else {
+			const selected = this.selectedPointIndex();
+			if (selected === null || selected >= points.length) {
+				this.selectedPointIndex.set(points.length - 1);
+			}
+		}
 	}
 
 	private emitLine() {
@@ -135,6 +266,21 @@ export class CenterlineEditor {
 
 		const pts = this.pts();
 		if (pts.length > 0) {
+			const preview = this.previewPolylinePx();
+			if (preview && preview.length > 1) {
+				ctx.save();
+				ctx.strokeStyle = '#a78bfa';
+				ctx.lineWidth = 2;
+				ctx.setLineDash([4, 4]);
+				ctx.beginPath();
+				ctx.moveTo(preview[0].x, preview[0].y);
+				for (let i = 1; i < preview.length; i++) {
+					ctx.lineTo(preview[i].x, preview[i].y);
+				}
+				ctx.stroke();
+				ctx.restore();
+			}
+
 			ctx.save();
 			ctx.strokeStyle = '#22d3ee';
 			ctx.lineWidth = 3;
@@ -145,8 +291,10 @@ export class CenterlineEditor {
 			ctx.restore();
 
 			ctx.save();
+			const selectedIdx = this.selectedPointIndex();
 			for (let i = 0; i < pts.length; i++) {
-				ctx.fillStyle = i === pts.length - 1 ? '#22d3ee' : '#ffffff';
+				ctx.fillStyle =
+					i === selectedIdx ? '#facc15' : i === pts.length - 1 ? '#22d3ee' : '#ffffff';
 				ctx.strokeStyle = '#111827';
 				ctx.lineWidth = 1.5;
 				ctx.beginPath();
@@ -182,8 +330,118 @@ export class CenterlineEditor {
 		}
 		return bestIdx;
 	}
+
+	private applySnapAndClamp(pt: Pt): Pt {
+		const { width, height } = this.canvasRef().nativeElement;
+		const snapped = this.snapEnabled() ? snapPoint(pt, 8) : pt;
+		return {
+			x: clamp(snapped.x, 0, width),
+			y: clamp(snapped.y, 0, height),
+		};
+	}
+
+	private previewPolylinePx(): Pt[] | null {
+		const points = this.pts();
+		if (
+			!this.smoothPreviewEnabled() ||
+			points.length < 3 ||
+			this.topdown().width <= 0 ||
+			this.topdown().height <= 0
+		) {
+			return null;
+		}
+		const top = this.topdown();
+		const normalized = points.map((p) => pxToNorm(p, top.width, top.height));
+		const derived = deriveCenterline(normalized, {
+			samplesPerSegment: this.smoothPreviewSamples(),
+		});
+		if (!derived) return null;
+		return derived.sampledPoints.map(([x, y]) => ({
+			x: x * top.width,
+			y: y * top.height,
+		}));
+	}
+
+	private resetHistory(points: Pt[]) {
+		const snapshot = clonePts(points);
+		this.history.set([snapshot]);
+		this.historyIndex.set(0);
+	}
+
+	private pushHistory() {
+		const snapshot = clonePts(this.pts());
+		const idx = this.historyIndex();
+		const history = this.history();
+		const trimmed = idx >= 0 ? history.slice(0, idx + 1) : [];
+		this.history.set([...trimmed, snapshot]);
+		this.historyIndex.set(trimmed.length);
+	}
+
+	private saveCurrentToHistory() {
+		const snapshot = clonePts(this.pts());
+		const idx = this.historyIndex();
+		const history = this.history();
+		const current = idx >= 0 ? history[idx] : null;
+		if (current && pointsEqual(current, snapshot)) return;
+		const trimmed = idx >= 0 ? history.slice(0, idx + 1) : [];
+		this.history.set([...trimmed, snapshot]);
+		this.historyIndex.set(trimmed.length);
+	}
 }
 
 function clamp(v: number, min: number, max: number) {
 	return Math.max(min, Math.min(max, v));
+}
+
+function clonePts(points: Pt[]): Pt[] {
+	return points.map((p) => ({ x: p.x, y: p.y }));
+}
+
+function pointsEqual(a: Pt[], b: Pt[]): boolean {
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if (a[i].x !== b[i].x || a[i].y !== b[i].y) return false;
+	}
+	return true;
+}
+
+function snapPoint(pt: Pt, step: number): Pt {
+	return {
+		x: Math.round(pt.x / step) * step,
+		y: Math.round(pt.y / step) * step,
+	};
+}
+
+function simplifyPolyline(points: Pt[], tolerance: number): Pt[] {
+	if (points.length <= 2) return clonePts(points);
+	const first = points[0];
+	const last = points[points.length - 1];
+	let index = -1;
+	let maxDistance = 0;
+
+	for (let i = 1; i < points.length - 1; i++) {
+		const distance = pointToSegmentDistance(points[i], first, last);
+		if (distance > maxDistance) {
+			index = i;
+			maxDistance = distance;
+		}
+	}
+
+	if (index !== -1 && maxDistance > tolerance) {
+		const left = simplifyPolyline(points.slice(0, index + 1), tolerance);
+		const right = simplifyPolyline(points.slice(index), tolerance);
+		return [...left.slice(0, -1), ...right];
+	}
+
+	return [first, last];
+}
+
+function pointToSegmentDistance(p: Pt, a: Pt, b: Pt): number {
+	const dx = b.x - a.x;
+	const dy = b.y - a.y;
+	if (dx === 0 && dy === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+	const t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy), 0, 1);
+	const projX = a.x + t * dx;
+	const projY = a.y + t * dy;
+	return Math.hypot(p.x - projX, p.y - projY);
 }

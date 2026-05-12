@@ -2,6 +2,7 @@ import {
 	afterNextRender,
 	ChangeDetectionStrategy,
 	Component,
+	computed,
 	ElementRef,
 	effect,
 	Injector,
@@ -35,7 +36,11 @@ export class TopdownAnnotator {
 	readonly drawMode = signal<'rect' | 'polygon'>('rect');
 	readonly selectedZoneId = signal<string | null>(null);
 	readonly selectedVertexIndex = signal<number | null>(null);
+	readonly snapEnabled = signal(true);
 	readonly polygonPoints = signal<Pt[]>([]);
+	readonly selectedZoneVertexCount = computed(
+		() => this.selectedZone()?.poly.length ?? 0,
+	);
 	private readonly dragStart = signal<Pt | null>(null);
 	private readonly draggingVertex = signal(false);
 	private readonly preview = signal<Pt[] | null>(null);
@@ -62,14 +67,15 @@ export class TopdownAnnotator {
 		ev.preventDefault();
 		const pt = this.pointerToCanvas(ev);
 		if (!pt) return;
+		const snapped = this.applySnapAndClamp(pt);
 
 		if (this.drawMode() === 'polygon') {
 			// In polygon mode always add a vertex; never let zone selection interrupt drawing
-			this.polygonPoints.update((pts) => [...pts, pt]);
+			this.polygonPoints.update((pts) => [...pts, snapped]);
 			return;
 		}
 
-		const vertexHit = this.findSelectedVertexAtPoint(pt, 10);
+		const vertexHit = this.findSelectedVertexAtPoint(snapped, 10);
 		if (vertexHit !== null) {
 			this.selectedVertexIndex.set(vertexHit);
 			this.draggingVertex.set(true);
@@ -77,7 +83,7 @@ export class TopdownAnnotator {
 			return;
 		}
 
-		const edgeHit = this.findSelectedEdgeAtPoint(pt, 8);
+		const edgeHit = this.findSelectedEdgeAtPoint(snapped, 8);
 		if (edgeHit) {
 			this.insertVertex(edgeHit.insertIndex, edgeHit.point);
 			this.selectedVertexIndex.set(edgeHit.insertIndex);
@@ -85,7 +91,7 @@ export class TopdownAnnotator {
 		}
 
 		// Rect mode: check if clicking on existing zone for selection
-		const clickedZone = this.findZoneAtPoint(pt);
+		const clickedZone = this.findZoneAtPoint(snapped);
 		if (clickedZone) {
 			this.selectedZoneId.set(clickedZone.id);
 			this.selectedVertexIndex.set(null);
@@ -95,7 +101,7 @@ export class TopdownAnnotator {
 		// Clear selection if clicking empty space, then start rectangle drag
 		this.selectedZoneId.set(null);
 		this.selectedVertexIndex.set(null);
-		this.dragStart.set(pt);
+		this.dragStart.set(snapped);
 		this.preview.set(null);
 		this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
 	}
@@ -104,21 +110,18 @@ export class TopdownAnnotator {
 		if (this.draggingVertex()) {
 			const pt = this.pointerToCanvas(ev);
 			if (!pt) return;
-			const { width, height } = this.canvasRef().nativeElement;
-			this.updateSelectedVertex({
-				x: clamp(pt.x, 0, width),
-				y: clamp(pt.y, 0, height),
-			});
+			this.updateSelectedVertex(this.applySnapAndClamp(pt));
 			return;
 		}
 
 		if (this.drawMode() === 'polygon') {
 			const pt = this.pointerToCanvas(ev);
 			if (!pt) return;
+			const snapped = this.applySnapAndClamp(pt);
 			const polyPts = this.polygonPoints();
 			if (polyPts.length > 0) {
 				// Show preview line from last point to cursor
-				this.preview.set([...polyPts, pt]);
+				this.preview.set([...polyPts, snapped]);
 			}
 			return;
 		}
@@ -127,8 +130,7 @@ export class TopdownAnnotator {
 		if (!start) return;
 		const pt = this.pointerToCanvas(ev);
 		if (!pt) return;
-		const { width, height } = this.canvasRef().nativeElement;
-		const clamped = { x: clamp(pt.x, 0, width), y: clamp(pt.y, 0, height) };
+		const clamped = this.applySnapAndClamp(pt);
 		this.preview.set(rectPolyPx(start, clamped));
 	}
 
@@ -269,7 +271,8 @@ export class TopdownAnnotator {
 
 		const canvas = this.canvasRef().nativeElement;
 		if (canvas.width === 0 || canvas.height === 0) return;
-		const norm = pxToNorm(pt, canvas.width, canvas.height);
+		const clamped = this.applySnapAndClamp(pt);
+		const norm = pxToNorm(clamped, canvas.width, canvas.height);
 		const updated = this.zonesIn().map((z) => {
 			if (z.id !== id || idx < 0 || idx >= z.poly.length) return z;
 			const poly = z.poly.map((p, i) => (i === idx ? norm : p));
@@ -352,6 +355,17 @@ export class TopdownAnnotator {
 		const norm = pxToNorm(pt, canvas.width, canvas.height);
 		const { containing } = queryZonesAtPoint(norm, this.zonesIn());
 		return containing.at(-1) ?? null;
+	}
+
+	private applySnapAndClamp(pt: Pt): Pt {
+		const canvas = this.canvasRef().nativeElement;
+		const snapped = this.snapEnabled()
+			? { x: Math.round(pt.x / 8) * 8, y: Math.round(pt.y / 8) * 8 }
+			: pt;
+		return {
+			x: clamp(snapped.x, 0, canvas.width),
+			y: clamp(snapped.y, 0, canvas.height),
+		};
 	}
 
 	private pointerToCanvas(ev: PointerEvent): Pt | null {
