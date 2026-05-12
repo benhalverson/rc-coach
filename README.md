@@ -57,7 +57,7 @@ The app is a single-page editor. The typical session looks like this:
 ### Import / Export notes
 
 - **Export** writes `topdown.png` (the rectified canvas) and `track.json` (scale, zones, centerline, and source quad metadata) as local file downloads.
-- **Import** reloads a previous session from those two files. The import performs a shallow shape check on `track.json`; malformed or semantically wrong data may not be caught until a later step fails.
+- **Import** reloads a previous session from those two files. The import performs **strict schema validation** on `track.json`: all required fields are checked, the `schemaVersion` must match `v1` (or a legacy unversioned file is accepted with a warning), and errors are surfaced immediately in the UI.
 - Scale calibration stores a single pixels-per-meter value applied uniformly to both axes. This assumes the rectified image has isotropic scaling.
 - There is **no cloud storage or sync**. Sessions only persist via the exported files on your local machine.
 
@@ -81,15 +81,17 @@ The app is a single-page editor. The typical session looks like this:
   - **Wall ride** zones
 - Create rectangular zones or freeform polygon zones
 - Select, retag, delete, undo, and summarize zones
+- **Vertex editing** on selected zones: drag individual vertices, insert new vertices on edges, and delete vertices (minimum 3-point triangles preserved)
 
 ### 4) Centerline Editing + Demo
 - Draw and adjust a racing centerline over the top-down map
 - Save centerline points in `track.json`
+- **Derived centerline geometry** (arc lengths, tangents, normals) is computed from the stored points for the follower demo
 - Run a simple centerline follower demo with steering and speed controls
   *(The demo is embedded in the editor flow, not a separate page)*
 
 ### 5) Portable Import / Export Format
-- Import an existing session from `topdown.png` + `track.json` (shallow validation)
+- Import an existing session from `topdown.png` + `track.json` (strict `schemaVersion v1` validation)
 - Export:
   - `topdown.png` (rectified image, downloaded locally)
   - `track.json` (scale + annotation + centerline metadata, downloaded locally)
@@ -103,6 +105,7 @@ Rectified, top-down version of the imported screenshot.
 
 ### `track.json`
 Contains:
+- `schemaVersion` (currently `1`)
 - track name + id
 - real-world dimensions (`widthMeters`, `heightMeters`)
 - top-down image pixel size
@@ -117,6 +120,7 @@ Contains:
 - **Angular 21** (standalone components + Signals)
 - **OpenCV.js** (warpPerspective / perspective transform) — bundled in `public/assets/opencv/`
 - **Tailwind CSS v4**
+- **Biome** (formatting + linting for TypeScript/CSS/HTML)
 - **Cloudflare-ready** deployment (Pages + optional Worker integrations)
 
 ---
@@ -136,7 +140,23 @@ pnpm start
 - `pnpm test` succeeds with the current Angular/Vitest setup.
 - `pnpm build` succeeds and writes the SSR bundle to `dist/`.
 - `pnpm start` runs `ng serve` and starts the local dev server on port `4200`.
-- `pnpm lint` is currently unavailable because this repo does not define a `lint` script.
+
+### Code formatting and linting
+
+This project uses [Biome](https://biomejs.dev/) for formatting and linting TypeScript, CSS, and HTML files. There is no `pnpm lint` script wired up yet; run Biome directly:
+
+```sh
+# Format all files
+pnpm exec biome format --write .
+
+# Lint and apply safe fixes
+pnpm exec biome lint --write .
+
+# Check everything (format + lint) without writing
+pnpm exec biome check .
+```
+
+The Biome configuration lives in `biome.json` at the repo root.
 
 ### Cloudflare type generation
 
@@ -169,12 +189,12 @@ gh pr list --state open
 
 ---
 
-## Roadmap (future work)
+## Roadmap (open issues)
 
-These are not yet implemented:
+The following are tracked as open GitHub issues:
 
-- Centerline smoothing and editing tools beyond point add/drag/undo/clear
-- Bezier zone tools, snapping, and richer zone parameters
-- Cloudflare Worker endpoints to persist tracks to **R2** (images) + **D1** (index/metadata)
-- Dedicated standalone viewer/replay page separate from the editor flow
-- Simulation/optimization layer (setup sweep coach) using this track twin as input
+- [#56 — Editor polish: snapping and centerline tools](https://github.com/benhalverson/rc-coach/issues/56) — toggleable snapping, centerline simplify/smooth controls, deeper undo
+- [#55 — Standalone viewer/replay foundation](https://github.com/benhalverson/rc-coach/issues/55) — separate viewer route for inspecting exported `v1` track files
+- [#57 — Cloud persistence: saved track library](https://github.com/benhalverson/rc-coach/issues/57) — Cloudflare R2 (images) + D1 (metadata) backend
+- [#53 — Coach prototype: symptom survey recommendations](https://github.com/benhalverson/rc-coach/issues/53) — local symptom-survey UI with explainable setup suggestions
+- [#54 — Coach rules engine v1](https://github.com/benhalverson/rc-coach/issues/54) — pure TypeScript rules layer for setup recommendations
