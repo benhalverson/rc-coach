@@ -80,7 +80,23 @@
     }
 
     <!-- Replace with your modern quad picker -->
-    <app-quad-picker *ngIf="srcImage()" [image]="srcImage()!" (quad)="onQuad($event)"></app-quad-picker>
+    @if (srcImage()) {
+      <app-quad-picker [image]="srcImage()!" (quad)="onQuad($event)"></app-quad-picker>
+    }
+
+    @if (warpError()) {
+      <div role="alert" aria-live="polite"
+        class="rounded-lg border border-red-700 bg-red-950 p-3 text-sm text-red-300">
+        <span class="font-semibold">Error: </span>{{ warpError() }}
+      </div>
+    }
+
+    @if (quadError()) {
+      <div role="alert" aria-live="polite"
+        class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-red-300">
+        ⚠ {{ quadError() }}
+      </div>
+    }
 
     @if (quadError()) {
       <div role="alert" aria-live="polite"

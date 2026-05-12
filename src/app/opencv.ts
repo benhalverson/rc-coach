@@ -55,6 +55,8 @@ export class Opencv {
 					return reject(new Error('OpenCV module not found after script load'));
 				// Ensure wasm resolves next to JS file
 				mod.locateFile = (file: string) => `/assets/opencv/${file}`;
+				// Guard against the WASM already being fully initialized (cached load)
+				if ((mod as unknown as { Mat?: unknown }).Mat) return resolve();
 				mod.onRuntimeInitialized = () => resolve();
 			};
 			s.onerror = () =>

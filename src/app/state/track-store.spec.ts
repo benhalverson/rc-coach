@@ -93,6 +93,7 @@ describe('isValidDimension', () => {
 describe('TrackStore – quad validation', () => {
 	let store: TrackStore;
 	let warpSpy: ReturnType<typeof vi.fn>;
+	let readySpy: ReturnType<typeof vi.fn>;
 
 	// A valid TL/TR/BR/BL quad well inside a 1600×900 image
 	const validQuad = [
@@ -103,6 +104,7 @@ describe('TrackStore – quad validation', () => {
 	];
 
 	beforeEach(() => {
+		readySpy = vi.fn().mockResolvedValue(undefined);
 		warpSpy = vi.fn().mockReturnValue(makeCanvas());
 
 		TestBed.configureTestingModule({
@@ -111,7 +113,7 @@ describe('TrackStore – quad validation', () => {
 				{
 					provide: Opencv,
 					useValue: {
-						ready: vi.fn().mockResolvedValue(undefined),
+						ready: readySpy,
 						warpPerspective: warpSpy,
 					},
 				},
@@ -292,6 +294,10 @@ describe('TrackStore – quad validation', () => {
 		expect(store.quadError()).toBeNull();
 	});
 
+	it('warpError starts as null', () => {
+		expect(store.warpError()).toBeNull();
+	});
+
 	it('sets quadError and stays on quad step when points are too close', async () => {
 		const tooCloseQuad = [
 			{ x: 100, y: 100 },
@@ -372,6 +378,32 @@ describe('TrackStore – quad validation', () => {
 		await TestBed.runInInjectionContext(() => store.onQuad(bad));
 		store.resetAll();
 		expect(store.quadError()).toBeNull();
+	});
+
+	it('sets warpError and stays on quad step when cv.ready() rejects', async () => {
+		readySpy.mockRejectedValue(new Error('Failed to load /assets/opencv/opencv.js'));
+
+		await TestBed.runInInjectionContext(() => store.onQuad(validQuad));
+
+		expect(store.warpError()).toContain('OpenCV failed to load');
+		expect(store.step()).toBe('quad');
+	});
+
+	it('falls back and advances when warpPerspective throws', async () => {
+		warpSpy.mockImplementation(() => {
+			throw new Error('cv internal error');
+		});
+
+		await TestBed.runInInjectionContext(() => store.onQuad(validQuad));
+
+		expect(store.quadError()).toContain('Perspective warp failed');
+		expect(store.step()).toBe('scale');
+	});
+
+	it('resetAll clears warpError', () => {
+		store.warpError.set('some error');
+		store.resetAll();
+		expect(store.warpError()).toBeNull();
 	});
 });
 

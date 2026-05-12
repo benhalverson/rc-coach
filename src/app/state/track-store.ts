@@ -30,6 +30,7 @@ export class TrackStore {
 	readonly quadError = signal<string | null>(null);
 
 	readonly topDown = signal<HTMLCanvasElement | null>(null);
+	readonly warpError = signal<string | null>(null);
 	readonly topDownDataUrl = signal<string | null>(null);
 	readonly topDownW = signal(1600);
 	readonly topDownH = signal(900);
@@ -172,6 +173,7 @@ export class TrackStore {
 			this.srcImage.set(img);
 			this.quadPx.set(null);
 			this.quadError.set(null);
+			this.warpError.set(null);
 			this.topDown.set(null);
 			this.zones.set([]);
 			this.step.set('quad');
@@ -182,12 +184,14 @@ export class TrackStore {
 	/**
 	 * Accept user-picked quad points and run perspective warp to generate `topDown`.
 	 * Validates the quad (4 points, convex, non-degenerate) before ordering and warping.
-	 * Ensures TL/TR/BR/BL ordering and falls back to simple draw if OpenCV fails.
+	 * Ensures TL/TR/BR/BL ordering and falls back to simple draw if OpenCV warp fails.
 	 * @param rawPts four points picked on the source image (any order).
 	 */
 	async onQuad(rawPts: Pt[]) {
 		const img = this.srcImage();
 		if (!img) return;
+
+		this.warpError.set(null);
 
 		const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
 
@@ -202,7 +206,13 @@ export class TrackStore {
 
 		this.quadPx.set(orderedv2);
 
-		await this.cv.ready();
+		try {
+			await this.cv.ready();
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			this.warpError.set(`OpenCV failed to load: ${msg}`);
+			return;
+		}
 
 		const outW = this.topDownW();
 		const outH = this.topDownH();
@@ -242,6 +252,7 @@ export class TrackStore {
 		this.quadPx.set(null);
 		this.quadError.set(null);
 		this.topDown.set(null);
+		this.warpError.set(null);
 		this.zones.set([]);
 		this.centerline.set([]);
 		this.measureMode.set(false);
@@ -529,7 +540,7 @@ export class TrackStore {
 		s.height = 32;
 
 		const sctx = s.getContext('2d', { willReadFrequently: true });
-		if (!sctx) return true;
+		if (!sctx) return false; // Cannot sample — assume not blank
 
 		sctx.drawImage(c, 0, 0, s.width, s.height);
 		const data = sctx.getImageData(0, 0, s.width, s.height).data;
