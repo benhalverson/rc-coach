@@ -54,14 +54,17 @@ describe('CoachPrototype', () => {
 		component.draftSymptom.set('understeer');
 		component.draftPhase.set('corner-entry');
 		component.draftSeverity.set(3);
+		component.draftSectionId.set('Turn 2');
 
 		component.addReport();
 		fixture.detectChanges();
+		const turn2Count = text().split('Turn 2').length - 1;
 
 		expect(text()).toContain('Increase rotation and steering');
 		expect(text()).toContain('Soften the front spring one step');
 		expect(text()).toContain('Add a small amount of front toe-out');
 		expect(text()).toContain('Entry and mid-corner understeer');
+		expect(turn2Count).toBe(3);
 	});
 
 	it('uses track context for context-sensitive recommendations', () => {
