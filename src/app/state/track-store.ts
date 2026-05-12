@@ -502,6 +502,7 @@ export class TrackStore {
 	 * Apply an imported session (PNG + JSON) to the current app state.
 	 * Rehydrates name, dimensions, zones, centerline, and creates the `topDown` canvas.
 	 * Zones with fewer than 3 polygon points are silently discarded.
+	 * @param nextStep route/view mode to enter after import; defaults to `annotate`.
 	 */
 	applyImport(nextStep: Step = 'annotate') {
 		const img = this.importTopdownImg();

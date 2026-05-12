@@ -30,6 +30,11 @@ type ViewerPoint = {
 	templateUrl: './track-viewer.html',
 	changeDetection: ChangeDetectionStrategy.OnPush,
 })
+/**
+ * Local-file viewer for exported tracks.
+ * Reuses validated import state from `TrackStore`, renders overlay inspection controls,
+ * and exposes the replay prototype without changing editor-specific workflows.
+ */
 export class TrackViewer {
 	private readonly store = inject(TrackStore);
 
@@ -80,27 +85,50 @@ export class TrackViewer {
 			.join(' '),
 	);
 
+	/**
+	 * Handle selection of a top-down PNG export for the viewer route.
+	 * @param ev change event from the PNG file input.
+	 */
 	onImportTopdownFile(ev: Event) {
 		this.store.onImportTopdownFile(ev);
 	}
 
+	/**
+	 * Handle selection of a validated track JSON export for the viewer route.
+	 * @param ev change event from the JSON file input.
+	 */
 	onImportTrackJsonFile(ev: Event) {
 		this.store.onImportTrackJsonFile(ev);
 	}
 
+	/**
+	 * Apply the currently selected local export into viewer mode.
+	 * Reuses the shared import pipeline but lands on the dedicated viewer step.
+	 */
 	applyImport() {
 		this.store.applyImport('viewer');
 	}
 
+	/**
+	 * Clear all shared track state and reset the viewer back to its empty local-file state.
+	 */
 	resetViewer() {
 		this.store.resetAll();
 	}
 }
 
+/**
+ * Viewer overlay stroke colors.
+ * Jump zones render in cyan while wallrides render in purple to match existing editor colors.
+ */
 function zoneColor(type: ZoneType): string {
 	return type === 'jump' ? '#22d3ee' : '#a855f7';
 }
 
+/**
+ * Viewer overlay fill colors.
+ * Uses the same zone hue as the stroke with a translucent fill for readable inspection overlays.
+ */
 function zoneFill(type: ZoneType): string {
 	return type === 'jump' ? 'rgba(34, 211, 238, 0.18)' : 'rgba(168, 85, 247, 0.18)';
 }
