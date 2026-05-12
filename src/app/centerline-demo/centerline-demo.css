@@ -20,8 +20,20 @@ h3 {
 }
 
 .vehicle-indicator {
-	color: #0066cc;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	color: #2563eb;
 	font-weight: bold;
+}
+
+.vehicle-indicator::before {
+	content: '';
+	width: 0.75em;
+	height: 0.75em;
+	border-radius: 999px;
+	background: #2563eb;
+	border: 2px solid #93c5fd;
 }
 
 .demo-canvas {

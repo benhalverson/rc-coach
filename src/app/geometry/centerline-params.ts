@@ -30,33 +30,42 @@ export function parameterizeCenterline(points: Vec2[]): CenterlineParams {
 	const headings: number[] = [];
 	const curvatures: number[] = [];
 
-	// Compute arc-lengths and headings.
-	for (let i = 0; i < points.length; i++) {
-		const p = points[i];
-		const pNext = points[(i + 1) % points.length];
+	const segmentHeadings: number[] = [];
+	const segmentLengths: number[] = [];
 
+	// Compute arc-lengths and headings for the open centerline polyline.
+	for (let i = 0; i < points.length - 1; i++) {
+		const p = points[i];
+		const pNext = points[i + 1];
 		const dx = pNext[0] - p[0];
 		const dy = pNext[1] - p[1];
-		const heading = Math.atan2(dy, dx);
-		headings.push(heading);
+		const segLen = Math.hypot(dx, dy);
 
-		// Arc-length segment.
-		if (i < points.length - 1) {
-			const segLen = Math.hypot(dx, dy);
-			arcLengths.push(arcLengths[i] + segLen);
+		segmentLengths.push(segLen);
+		segmentHeadings.push(Math.atan2(dy, dx));
+		arcLengths.push(arcLengths[i] + segLen);
+	}
+
+	for (let i = 0; i < points.length; i++) {
+		if (i === points.length - 1) {
+			headings.push(segmentHeadings[segmentHeadings.length - 1] ?? 0);
+		} else {
+			headings.push(segmentHeadings[i] ?? headings[headings.length - 1] ?? 0);
 		}
 	}
 
-	// Compute curvature via centered difference of heading (forward/backward).
+	// Compute curvature at interior vertices only. Endpoints do not invent a closing turn.
 	for (let i = 0; i < points.length; i++) {
-		const hNext = headings[(i + 1) % headings.length];
-		const hPrev = headings[i === 0 ? headings.length - 1 : i - 1];
-		const dHeading = hNext - hPrev;
-		const dS =
-			arcLengths[(i + 1) % arcLengths.length] -
-			arcLengths[i === 0 ? arcLengths.length - 1 : i - 1];
-		const curv = dS > 0.1 ? dHeading / dS : 0;
-		curvatures.push(curv);
+		if (i === 0 || i === points.length - 1) {
+			curvatures.push(0);
+			continue;
+		}
+
+		const hNext = segmentHeadings[i];
+		const hPrev = segmentHeadings[i - 1];
+		const dHeading = normalizeAngle(hNext - hPrev);
+		const dS = segmentLengths[i - 1] + segmentLengths[i];
+		curvatures.push(dS > 1e-6 ? dHeading / dS : 0);
 	}
 
 	const totalLength = arcLengths[arcLengths.length - 1];
@@ -74,19 +83,23 @@ export function parameterizeCenterline(points: Vec2[]): CenterlineParams {
  * Interpolate position on the parameterized centerline at arc-length s.
  * Uses linear interpolation between the nearest points.
  * @param params centerline parameters.
- * @param s arc-length query (wrapped to [0, totalLength]).
+ * @param s arc-length query (clamped to [0, totalLength]).
  * @returns [x, y] position at arc-length s.
  */
 export function poseAtArcLength(
 	params: CenterlineParams,
 	s: number,
 ): { pos: Vec2; heading: number; curvature: number } {
-	const { points, arcLengths, totalLength, headings, curvatures } = params;
-	const sWrapped = ((s % totalLength) + totalLength) % totalLength;
+	const { points, arcLengths, totalLength, curvatures } = params;
+	if (totalLength <= 0) {
+		return { pos: points[0], heading: 0, curvature: 0 };
+	}
+
+	const clampedS = Math.max(0, Math.min(s, totalLength));
 
 	let idx = 0;
-	for (let i = 0; i < arcLengths.length; i++) {
-		if (arcLengths[i] > sWrapped) {
+	for (let i = 1; i < arcLengths.length; i++) {
+		if (arcLengths[i] >= clampedS) {
 			idx = i - 1;
 			break;
 		}
@@ -97,15 +110,13 @@ export function poseAtArcLength(
 	const s1 = arcLengths[idx + 1];
 	const p0 = points[idx];
 	const p1 = points[idx + 1];
-	const h0 = headings[idx];
-	const h1 = headings[idx + 1];
 	const k0 = curvatures[idx];
 	const k1 = curvatures[idx + 1];
 
-	const t = s1 > s0 ? (sWrapped - s0) / (s1 - s0) : 0;
+	const t = s1 > s0 ? (clampedS - s0) / (s1 - s0) : 0;
 	const x = p0[0] + t * (p1[0] - p0[0]);
 	const y = p0[1] + t * (p1[1] - p0[1]);
-	const heading = h0 + t * (h1 - h0);
+	const heading = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
 	const curvature = k0 + t * (k1 - k0);
 
 	return { pos: [x, y], heading, curvature };
@@ -127,14 +138,11 @@ export function nearestArcLength(
 	let bestS = 0;
 	let bestD = 0;
 
-	for (let i = 0; i < points.length; i++) {
+	for (let i = 0; i < points.length - 1; i++) {
 		const p0 = points[i];
-		const p1 = points[(i + 1) % points.length];
+		const p1 = points[i + 1];
 		const s0 = arcLengths[i];
-		const s1 =
-			i < points.length - 1
-				? arcLengths[i + 1]
-				: arcLengths[0] + params.totalLength;
+		const s1 = arcLengths[i + 1];
 
 		// Project pt onto segment p0–p1.
 		const dx = p1[0] - p0[0];
@@ -155,11 +163,23 @@ export function nearestArcLength(
 			minDist = dist;
 			bestS = s0 + t * (s1 - s0);
 			// Lateral error: signed distance (+ right, - left by convention).
-			const normalX = -dy / Math.sqrt(lenSq);
-			const normalY = dx / Math.sqrt(lenSq);
-			bestD = (pt[0] - closest[0]) * normalX + (pt[1] - closest[1]) * normalY;
+			if (lenSq > 1e-6) {
+				const len = Math.sqrt(lenSq);
+				const normalX = -dy / len;
+				const normalY = dx / len;
+				bestD = (pt[0] - closest[0]) * normalX + (pt[1] - closest[1]) * normalY;
+			} else {
+				bestD = 0;
+			}
 		}
 	}
 
 	return { s: bestS, distance: minDist, d: bestD };
+}
+
+function normalizeAngle(angle: number): number {
+	let a = angle;
+	while (a > Math.PI) a -= 2 * Math.PI;
+	while (a < -Math.PI) a += 2 * Math.PI;
+	return a;
 }

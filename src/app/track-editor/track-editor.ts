@@ -1,10 +1,15 @@
 import { CommonModule, JsonPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, viewChild } from '@angular/core';
+import {
+	ChangeDetectionStrategy,
+	Component,
+	inject,
+	viewChild,
+} from '@angular/core';
 import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
 import { QuadPicker } from '../quad-picker/quad-picker';
-import { TrackStore, type Step } from '../state/track-store';
+import { type Step, TrackStore } from '../state/track-store';
 import { TopdownAnnotator } from '../topdown-annotator/topdown-annotator';
 import type { Vec2, ZoneType } from '../track-types';
 
@@ -51,6 +56,8 @@ export class TrackEditor {
 	readonly zones = this.store.zones;
 	readonly centerline = this.store.centerline;
 	readonly centerlinePointsSvg = this.store.centerlinePointsSvg;
+	readonly derivedCenterline = this.store.derivedCenterline;
+	readonly derivedCenterlinePointsSvg = this.store.derivedCenterlinePointsSvg;
 	readonly measureMode = this.store.measureMode;
 	readonly measurePt1 = this.store.measurePt1;
 	readonly measurePt2 = this.store.measurePt2;
@@ -64,6 +71,7 @@ export class TrackEditor {
 	readonly scaleValid = this.store.scaleValid;
 	readonly trackDef = this.store.trackDef;
 	readonly exportErrors = this.store.exportErrors;
+	readonly exportWarnings = this.store.exportWarnings;
 	readonly exportValid = this.store.exportValid;
 
 	// Import proxies
@@ -72,7 +80,9 @@ export class TrackEditor {
 	readonly canImport = this.store.canImport;
 	readonly pixelsPerMeterAuto = this.store.pixelsPerMeterAuto;
 	readonly importJsonError = this.store.importJsonError;
+	readonly importWarnings = this.store.importWarnings;
 	readonly importPngError = this.store.importPngError;
+	readonly importCompatibilityError = this.store.importCompatibilityError;
 
 	onFile(ev: Event) {
 		this.store.onFile(ev);

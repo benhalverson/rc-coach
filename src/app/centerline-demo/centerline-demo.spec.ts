@@ -50,6 +50,20 @@ describe('CenterlineDemoComponent', () => {
 		expect(params?.totalLength).toBeGreaterThan(0);
 	});
 
+	it('centerlineParams uses derived sampled geometry', () => {
+		store.centerline.set([
+			[0, 0.5],
+			[0.5, 0.1],
+			[1, 0.5],
+		]);
+		fixture.detectChanges();
+
+		const params = component.centerlineParams();
+
+		expect(params).not.toBeNull();
+		expect(params?.points.length).toBeGreaterThan(store.centerline().length);
+	});
+
 	it('toggleSimulation flips isRunning', () => {
 		const initial = component.isRunning();
 

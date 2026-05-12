@@ -2,6 +2,10 @@ export type Vec2 = [number, number];
 
 export type ZoneType = 'jump' | 'wallride';
 
+export const TRACK_SCHEMA_VERSION = 1;
+
+export type TrackSchemaVersion = typeof TRACK_SCHEMA_VERSION;
+
 export type Zone = {
 	id: string;
 	type: ZoneType;
@@ -10,6 +14,7 @@ export type Zone = {
 };
 
 export type TrackDef = {
+	schemaVersion?: TrackSchemaVersion;
 	id: string;
 	name: string;
 	widthMeters: number;

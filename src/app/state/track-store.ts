@@ -1,8 +1,22 @@
 import { computed, effect, Injectable, inject, signal } from '@angular/core';
-import { orderQuadTLTRBRBLv2, validateQuadTLTRBRBL, type Pt } from '../geometry/geometry';
+import { deriveCenterline } from '../geometry/derived-centerline';
+import {
+	orderQuadTLTRBRBLv2,
+	type Pt,
+	validateQuadTLTRBRBL,
+} from '../geometry/geometry';
 import { Opencv } from '../opencv';
-import type { TrackDef, Vec2, Zone } from '../track-types';
-import { getTrackExportErrors } from './track-validation';
+import {
+	TRACK_SCHEMA_VERSION,
+	type TrackDef,
+	type Vec2,
+	type Zone,
+} from '../track-types';
+import {
+	getTrackExportErrors,
+	getTrackExportValidation,
+	validateTrackDef,
+} from './track-validation';
 
 /** Returns true only when v is a finite number greater than zero. */
 export function isValidDimension(v: unknown): v is number {
@@ -23,6 +37,7 @@ export class TrackStore {
 	private readonly cv = inject(Opencv);
 
 	readonly step = signal<Step>('upload');
+	readonly trackId = signal(makeTrackId());
 
 	readonly srcImage = signal<HTMLImageElement | null>(null);
 	readonly srcImageName = signal<string>('track.png');
@@ -41,11 +56,20 @@ export class TrackStore {
 
 	readonly zones = signal<Zone[]>([]);
 	readonly centerline = signal<Vec2[]>([]);
+	readonly derivedCenterline = computed(() =>
+		deriveCenterline(this.centerline(), { samplesPerSegment: 12 }),
+	);
 	readonly centerlinePointsSvg = computed(() =>
 		this.centerline()
 			.map((p) => `${p[0] * 100},${p[1] * 100}`)
 			.join(' '),
 	);
+	readonly derivedCenterlinePointsSvg = computed(() => {
+		const derived = this.derivedCenterline();
+		return (derived?.sampledPoints ?? [])
+			.map((p) => `${p[0] * 100},${p[1] * 100}`)
+			.join(' ');
+	});
 
 	// Scale calibration via measurement
 	readonly measureMode = signal(false);
@@ -87,9 +111,7 @@ export class TrackStore {
 
 	readonly canGoAnnotate = computed(
 		() =>
-			!!this.topDown() &&
-			this.scaleValid() &&
-			this.name().trim().length > 0,
+			!!this.topDown() && this.scaleValid() && this.name().trim().length > 0,
 	);
 
 	readonly canGoAnnotateHint = computed<string | null>(() => {
@@ -123,7 +145,8 @@ export class TrackStore {
 		const quad = this.quadPx();
 
 		const def: TrackDef = {
-			id: crypto.randomUUID(),
+			schemaVersion: TRACK_SCHEMA_VERSION,
+			id: this.trackId(),
 			name: this.name().trim(),
 			widthMeters: this.widthMeters(),
 			heightMeters: this.heightMeters(),
@@ -142,14 +165,21 @@ export class TrackStore {
 		return def;
 	});
 
+	readonly exportValidation = computed(() =>
+		getTrackExportValidation({
+			track: this.trackDef(),
+			hasTopDown: !!this.topDown(),
+			topDownSize: getCanvasSize(this.topDown()),
+		}),
+	);
 	readonly exportErrors = computed(() =>
 		getTrackExportErrors({
 			track: this.trackDef(),
 			hasTopDown: !!this.topDown(),
-			hasQuad: !!this.quadPx(),
-			hasSourceImage: !!this.srcImage(),
+			topDownSize: getCanvasSize(this.topDown()),
 		}),
 	);
+	readonly exportWarnings = computed(() => this.exportValidation().warnings);
 
 	readonly exportValid = computed(() => this.exportErrors().length === 0);
 
@@ -170,12 +200,14 @@ export class TrackStore {
 		const img = new Image();
 		img.onload = () => {
 			URL.revokeObjectURL(url);
+			this.trackId.set(makeTrackId());
 			this.srcImage.set(img);
 			this.quadPx.set(null);
 			this.quadError.set(null);
 			this.warpError.set(null);
 			this.topDown.set(null);
 			this.zones.set([]);
+			this.centerline.set([]);
 			this.step.set('quad');
 		};
 		img.src = url;
@@ -248,7 +280,9 @@ export class TrackStore {
 	 */
 	resetAll() {
 		this.step.set('upload');
+		this.trackId.set(makeTrackId());
 		this.srcImage.set(null);
+		this.srcImageName.set('track.png');
 		this.quadPx.set(null);
 		this.quadError.set(null);
 		this.topDown.set(null);
@@ -262,6 +296,7 @@ export class TrackStore {
 		this.importTopdownImg.set(null);
 		this.importTrack.set(null);
 		this.importJsonError.set(null);
+		this.importWarnings.set([]);
 		this.importPngError.set(null);
 	}
 
@@ -370,9 +405,26 @@ export class TrackStore {
 	readonly importTopdownImg = signal<HTMLImageElement | null>(null);
 	readonly importTrack = signal<TrackDef | null>(null);
 	readonly importJsonError = signal<string | null>(null);
+	readonly importWarnings = signal<string[]>([]);
 	readonly importPngError = signal<string | null>(null);
+	readonly importCompatibilityError = computed(() => {
+		const img = this.importTopdownImg();
+		const track = this.importTrack();
+		if (!img || !track) return null;
+		const imageSize = getImageSize(img);
+		if (
+			imageSize.w !== track.topdownPx.w ||
+			imageSize.h !== track.topdownPx.h
+		) {
+			return `topdown.png dimensions (${imageSize.w}x${imageSize.h}) do not match track.json topdownPx (${track.topdownPx.w}x${track.topdownPx.h}).`;
+		}
+		return null;
+	});
 	readonly canImport = computed(
-		() => !!this.importTopdownImg() && !!this.importTrack(),
+		() =>
+			!!this.importTopdownImg() &&
+			!!this.importTrack() &&
+			!this.importCompatibilityError(),
 	);
 	readonly pixelsPerMeterAuto = computed(() => {
 		const t = this.importTrack();
@@ -400,7 +452,9 @@ export class TrackStore {
 		};
 		img.onerror = () => {
 			URL.revokeObjectURL(url);
-			this.importPngError.set('Failed to load image. Make sure the file is a valid PNG.');
+			this.importPngError.set(
+				'Failed to load image. Make sure the file is a valid PNG.',
+			);
 		};
 		img.src = url;
 	}
@@ -415,39 +469,30 @@ export class TrackStore {
 		const file = input.files?.[0];
 		if (!file) return;
 		this.importJsonError.set(null);
+		this.importWarnings.set([]);
 		const reader = new FileReader();
 		reader.onload = () => {
 			try {
 				const raw = reader.result as string;
-				const json = JSON.parse(raw) as TrackDef;
-				if (
-					!json ||
-					typeof json !== 'object' ||
-					!json.topdownPx ||
-					!isValidDimension(json.topdownPx.w) ||
-					!isValidDimension(json.topdownPx.h) ||
-					!isValidDimension(json.widthMeters) ||
-					!isValidDimension(json.heightMeters) ||
-					typeof json.name !== 'string'
-				) {
+				const json = JSON.parse(raw);
+				const result = validateTrackDef(json, { allowDraft: true });
+				if (!result.ok) {
+					this.importTrack.set(null);
 					this.importJsonError.set(
-						'Invalid track.json: file must contain name, widthMeters, heightMeters, and topdownPx fields.',
+						`Invalid track.json: ${result.errors.join(' ')}`,
 					);
+					this.importWarnings.set(result.warnings);
 					return;
 				}
-				// Discard zones that are structurally invalid (< 3 points)
-				if (Array.isArray(json.zones)) {
-					json.zones = json.zones.filter(
-						(z: Zone) =>
-							z && z.id && z.type && Array.isArray(z.poly) && z.poly.length >= 3,
-					);
-				} else {
-					json.zones = [];
-				}
-				this.importTrack.set(json);
+
+				this.importTrack.set(result.track);
 				this.importJsonError.set(null);
+				this.importWarnings.set(result.warnings);
 			} catch {
-				this.importJsonError.set('Failed to parse track.json: file is not valid JSON.');
+				this.importTrack.set(null);
+				this.importJsonError.set(
+					'Failed to parse track.json: file is not valid JSON.',
+				);
 			}
 		};
 		reader.readAsText(file);
@@ -462,22 +507,37 @@ export class TrackStore {
 		const img = this.importTopdownImg();
 		const t = this.importTrack();
 		if (!img || !t) return;
+		const compatibilityError = this.importCompatibilityError();
+		if (compatibilityError) {
+			this.importPngError.set(compatibilityError);
+			return;
+		}
 
-		this.name.set(t.name);
-		this.widthMeters.set(t.widthMeters);
-		this.heightMeters.set(t.heightMeters);
-		// Filter out any malformed zones before storing
-		const validZones = (t.zones ?? []).filter(
-			(z) => z && z.id && z.type && Array.isArray(z.poly) && z.poly.length >= 3,
-		);
-		this.zones.set(validZones);
-		this.centerline.set(t.centerline ?? []);
-		this.srcImageName.set(t.import?.srcImageName ?? this.srcImageName());
-		this.quadPx.set(t.import?.srcQuadPx ?? null);
+		const validation = validateTrackDef(t, {
+			allowDraft: true,
+			imageSize: getImageSize(img),
+		});
+		if (!validation.ok) {
+			this.importJsonError.set(
+				`Invalid track.json: ${validation.errors.join(' ')}`,
+			);
+			this.importWarnings.set(validation.warnings);
+			return;
+		}
+		const track = validation.track;
+
+		this.trackId.set(track.id);
+		this.name.set(track.name);
+		this.widthMeters.set(track.widthMeters);
+		this.heightMeters.set(track.heightMeters);
+		this.zones.set(track.zones);
+		this.centerline.set(track.centerline ?? []);
+		this.srcImageName.set(track.import?.srcImageName ?? this.srcImageName());
+		this.quadPx.set(track.import?.srcQuadPx ?? null);
 
 		const c = document.createElement('canvas');
-		c.width = t.topdownPx.w;
-		c.height = t.topdownPx.h;
+		c.width = track.topdownPx.w;
+		c.height = track.topdownPx.h;
 		const ctx = c.getContext('2d');
 		if (ctx) ctx.drawImage(img, 0, 0, c.width, c.height);
 		this.topDown.set(c);
@@ -487,6 +547,7 @@ export class TrackStore {
 		this.importTopdownImg.set(null);
 		this.importTrack.set(null);
 		this.importJsonError.set(null);
+		this.importWarnings.set([]);
 		this.importPngError.set(null);
 		this.step.set('annotate');
 	}
@@ -509,26 +570,6 @@ export class TrackStore {
 		const ctx = c.getContext('2d');
 		if (ctx) ctx.drawImage(img, 0, 0, w, h);
 		return c;
-	}
-
-	/**
-	 * Heuristic to detect a blank canvas by sampling a small region for non-zero pixels.
-	 * @param c canvas to inspect.
-	 * @returns true if all sampled pixels are zero; otherwise false.
-	 */
-	private isBlankCanvas(c: HTMLCanvasElement): boolean {
-		const ctx = c.getContext('2d');
-		if (!ctx) return true;
-		const sampleW = Math.min(8, c.width || 1);
-		const sampleH = Math.min(8, c.height || 1);
-		const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
-		for (let i = 0; i < data.length; i += 4) {
-			const r = data[i];
-			const g = data[i + 1];
-			const b = data[i + 2];
-			if (r !== 0 || g !== 0 || b !== 0) return false;
-		}
-		return true;
 	}
 
 	private isMostlyBlankCanvas(
@@ -559,4 +600,24 @@ export class TrackStore {
 
 		return nonBlack / total < nonBlackRatioMin;
 	}
+}
+
+function makeTrackId(): string {
+	const randomUUID = globalThis.crypto?.randomUUID;
+	return typeof randomUUID === 'function'
+		? randomUUID.call(globalThis.crypto)
+		: `track-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getImageSize(img: HTMLImageElement): { w: number; h: number } {
+	return {
+		w: img.naturalWidth || img.width,
+		h: img.naturalHeight || img.height,
+	};
+}
+
+function getCanvasSize(
+	canvas: HTMLCanvasElement | null,
+): { w: number; h: number } | null {
+	return canvas ? { w: canvas.width, h: canvas.height } : null;
 }

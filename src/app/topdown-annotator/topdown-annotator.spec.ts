@@ -28,6 +28,15 @@ describe('TopdownAnnotator', () => {
 		await fixture.whenStable();
 	});
 
+	function setCanvasSize(w = 100, h = 100) {
+		const canvas = fixture.nativeElement.querySelector(
+			'canvas',
+		) as HTMLCanvasElement;
+		canvas.width = w;
+		canvas.height = h;
+		return canvas;
+	}
+
 	it('should create', () => {
 		expect(component).toBeTruthy();
 	});
@@ -124,10 +133,95 @@ describe('TopdownAnnotator', () => {
 		expect(emitted).toHaveLength(0);
 	});
 
+	it('deleteSelectedVertex: removes the selected vertex and preserves zone shape', () => {
+		const z1 = makeZone('z1');
+		const emitted: Zone[][] = [];
+		component.zonesOut.subscribe((z) => emitted.push(z));
+		fixture.componentRef.setInput('zonesIn', [z1]);
+		component.selectedZoneId.set('z1');
+		component.selectedVertexIndex.set(1);
+
+		component.deleteSelectedVertex();
+
+		expect(emitted).toHaveLength(1);
+		expect(emitted[0]).toHaveLength(1);
+		expect(emitted[0][0]).toEqual({
+			...z1,
+			poly: [
+				[0.1, 0.1],
+				[0.4, 0.4],
+				[0.1, 0.4],
+			],
+		});
+	});
+
+	it('deleteSelectedVertex: keeps triangles intact', () => {
+		const z1: Zone = {
+			id: 'z1',
+			type: 'jump',
+			poly: [
+				[0, 0],
+				[1, 0],
+				[1, 1],
+			],
+		};
+		const emitted: Zone[][] = [];
+		component.zonesOut.subscribe((z) => emitted.push(z));
+		fixture.componentRef.setInput('zonesIn', [z1]);
+		component.selectedZoneId.set('z1');
+		component.selectedVertexIndex.set(1);
+
+		component.deleteSelectedVertex();
+
+		expect(emitted).toHaveLength(0);
+	});
+
+	it('updateSelectedVertex: drags a selected vertex in normalized coordinates', () => {
+		setCanvasSize();
+		const z1 = makeZone('z1');
+		const emitted: Zone[][] = [];
+		component.zonesOut.subscribe((z) => emitted.push(z));
+		fixture.componentRef.setInput('zonesIn', [z1]);
+		component.selectedZoneId.set('z1');
+		component.selectedVertexIndex.set(1);
+
+		component['updateSelectedVertex']({ x: 50, y: 60 });
+
+		expect(emitted).toHaveLength(1);
+		expect(emitted[0][0].poly[1]).toEqual([0.5, 0.6]);
+		expect(emitted[0][0].type).toBe('jump');
+	});
+
+	it('insertVertex: adds a vertex without changing the Zone[] output contract', () => {
+		setCanvasSize();
+		const z1 = makeZone('z1');
+		const emitted: Zone[][] = [];
+		component.zonesOut.subscribe((z) => emitted.push(z));
+		fixture.componentRef.setInput('zonesIn', [z1]);
+		component.selectedZoneId.set('z1');
+
+		component['insertVertex'](1, { x: 25, y: 10 });
+
+		expect(emitted).toHaveLength(1);
+		expect(emitted[0]).toHaveLength(1);
+		expect(emitted[0][0].poly).toHaveLength(5);
+		expect(emitted[0][0].poly[1]).toEqual([0.25, 0.1]);
+		expect(Object.keys(emitted[0][0]).sort()).toEqual(['id', 'poly', 'type']);
+	});
+
 	// ── changeSelectedType ─────────────────────────────────────────────────────
 
 	it('changeSelectedType: updates the type of the selected zone', () => {
-		const z1: Zone = { id: 'z1', type: 'jump', poly: [[0, 0], [1, 0], [1, 1], [0, 1]] };
+		const z1: Zone = {
+			id: 'z1',
+			type: 'jump',
+			poly: [
+				[0, 0],
+				[1, 0],
+				[1, 1],
+				[0, 1],
+			],
+		};
 		const emitted: Zone[][] = [];
 		component.zonesOut.subscribe((z) => emitted.push(z));
 		fixture.componentRef.setInput('zonesIn', [z1]);
@@ -195,7 +289,12 @@ describe('TopdownAnnotator', () => {
 		component.drawMode.set('rect');
 		// Simulate a drag that was started but not finished
 		component['dragStart'].set({ x: 10, y: 10 });
-		component['preview'].set([{ x: 10, y: 10 }, { x: 50, y: 10 }, { x: 50, y: 50 }, { x: 10, y: 50 }]);
+		component['preview'].set([
+			{ x: 10, y: 10 },
+			{ x: 50, y: 10 },
+			{ x: 50, y: 50 },
+			{ x: 10, y: 50 },
+		]);
 
 		component.setDrawMode('polygon');
 

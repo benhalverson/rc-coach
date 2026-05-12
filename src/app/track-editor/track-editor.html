@@ -37,12 +37,18 @@
         </label>
         <label class="space-y-1">
           <div class="text-xs text-neutral-500">Track definition (JSON)</div>
-          <input type="file" accept="application/json" (change)="onImportTrackJsonFile($event)" />
-          @if (importJsonError()) {
-            <div role="alert" class="text-xs text-red-400">{{ importJsonError() }}</div>
-          }
-        </label>
-      </div>
+	          <input type="file" accept="application/json" (change)="onImportTrackJsonFile($event)" />
+	          @if (importJsonError()) {
+	            <div role="alert" class="text-xs text-red-400">{{ importJsonError() }}</div>
+	          }
+	          @if (importWarnings().length) {
+	            <div class="text-xs text-amber-300">{{ importWarnings().join(' ') }}</div>
+	          }
+	        </label>
+	      </div>
+	      @if (importCompatibilityError()) {
+	        <div role="alert" class="text-xs text-red-400">{{ importCompatibilityError() }}</div>
+	      }
 
       <div class="text-xs text-neutral-400" *ngIf="importTrack() as t">
         Loaded track: <span class="text-neutral-200">{{ t.name }}</span>
@@ -349,13 +355,20 @@
   <section *ngIf="step()==='export'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
     <div class="text-neutral-400">Export your track definition. Resolve any errors below before downloading.</div>
 
-    <div *ngIf="exportErrors().length" role="alert" aria-live="polite"
-      class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-neutral-100">
+	    <div *ngIf="exportErrors().length" role="alert" aria-live="polite"
+	      class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-neutral-100">
       <div class="font-semibold mb-1 text-red-300">Fix these before export:</div>
       <ul class="list-disc pl-5">
         <li *ngFor="let err of exportErrors()">{{ err }}</li>
       </ul>
-    </div>
+	    </div>
+	    <div *ngIf="exportWarnings().length"
+	      class="rounded-lg border border-amber-700 bg-neutral-900 p-3 text-sm text-amber-200">
+	      <div class="font-semibold mb-1">Warnings:</div>
+	      <ul class="list-disc pl-5">
+	        <li *ngFor="let warning of exportWarnings()">{{ warning }}</li>
+	      </ul>
+	    </div>
 
     <div class="flex flex-wrap gap-2">
       <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
@@ -397,9 +410,9 @@
           <app-topdown-annotator *ngIf="topDown()" [topdown]="topDown()!" [zonesIn]="zones()"
             (zonesOut)="zones.set($event)" class="pointer-events-none"></app-topdown-annotator>
           <svg class="pointer-events-none absolute inset-0" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <polyline *ngIf="centerline().length > 1"
-              [attr.points]="centerlinePointsSvg()"
-              fill="none" stroke="#22d3ee" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round" />
+	            <polyline *ngIf="derivedCenterline()"
+	              [attr.points]="derivedCenterlinePointsSvg()"
+	              fill="none" stroke="#22d3ee" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round" />
             <g *ngIf="centerline().length">
               <circle *ngFor="let p of centerline()" [attr.cx]="p[0]*100" [attr.cy]="p[1]*100" r="1.4" fill="#22d3ee" />
             </g>

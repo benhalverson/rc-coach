@@ -12,7 +12,7 @@ import {
 	signal,
 	viewChild,
 } from '@angular/core';
-import { type Pt, pxToNorm, rectPolyPx } from '../geometry/geometry';
+import { normToPx, type Pt, pxToNorm, rectPolyPx } from '../geometry/geometry';
 import { queryZonesAtPoint } from '../geometry/zone-query';
 import type { Zone, ZoneType } from '../track-types';
 
@@ -34,8 +34,10 @@ export class TopdownAnnotator {
 	readonly currentType = signal<ZoneType>('jump');
 	readonly drawMode = signal<'rect' | 'polygon'>('rect');
 	readonly selectedZoneId = signal<string | null>(null);
+	readonly selectedVertexIndex = signal<number | null>(null);
 	readonly polygonPoints = signal<Pt[]>([]);
 	private readonly dragStart = signal<Pt | null>(null);
+	private readonly draggingVertex = signal(false);
 	private readonly preview = signal<Pt[] | null>(null);
 	private readonly injector = inject(Injector);
 
@@ -48,6 +50,7 @@ export class TopdownAnnotator {
 					this.preview();
 					this.zonesIn();
 					this.selectedZoneId();
+					this.selectedVertexIndex();
 					this.polygonPoints();
 					this.redraw();
 				});
@@ -66,21 +69,49 @@ export class TopdownAnnotator {
 			return;
 		}
 
+		const vertexHit = this.findSelectedVertexAtPoint(pt, 10);
+		if (vertexHit !== null) {
+			this.selectedVertexIndex.set(vertexHit);
+			this.draggingVertex.set(true);
+			this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
+			return;
+		}
+
+		const edgeHit = this.findSelectedEdgeAtPoint(pt, 8);
+		if (edgeHit) {
+			this.insertVertex(edgeHit.insertIndex, edgeHit.point);
+			this.selectedVertexIndex.set(edgeHit.insertIndex);
+			return;
+		}
+
 		// Rect mode: check if clicking on existing zone for selection
 		const clickedZone = this.findZoneAtPoint(pt);
 		if (clickedZone) {
 			this.selectedZoneId.set(clickedZone.id);
+			this.selectedVertexIndex.set(null);
 			return;
 		}
 
 		// Clear selection if clicking empty space, then start rectangle drag
 		this.selectedZoneId.set(null);
+		this.selectedVertexIndex.set(null);
 		this.dragStart.set(pt);
 		this.preview.set(null);
 		this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
 	}
 
 	onPointerMove(ev: PointerEvent) {
+		if (this.draggingVertex()) {
+			const pt = this.pointerToCanvas(ev);
+			if (!pt) return;
+			const { width, height } = this.canvasRef().nativeElement;
+			this.updateSelectedVertex({
+				x: clamp(pt.x, 0, width),
+				y: clamp(pt.y, 0, height),
+			});
+			return;
+		}
+
 		if (this.drawMode() === 'polygon') {
 			const pt = this.pointerToCanvas(ev);
 			if (!pt) return;
@@ -102,6 +133,12 @@ export class TopdownAnnotator {
 	}
 
 	onPointerUp(ev: PointerEvent) {
+		if (this.draggingVertex()) {
+			this.draggingVertex.set(false);
+			this.canvasRef().nativeElement.releasePointerCapture(ev.pointerId);
+			return;
+		}
+
 		if (this.drawMode() === 'polygon') return;
 
 		const start = this.dragStart();
@@ -130,12 +167,18 @@ export class TopdownAnnotator {
 		};
 		const updated = [...this.zonesIn(), next];
 		this.zonesOut.emit(updated);
+		this.selectedZoneId.set(next.id);
+		this.selectedVertexIndex.set(null);
 		this.preview.set(null);
 	}
 
 	undoLast() {
 		const updated = this.zonesIn().slice(0, -1);
 		this.zonesOut.emit(updated);
+		if (!updated.some((z) => z.id === this.selectedZoneId())) {
+			this.selectedZoneId.set(null);
+			this.selectedVertexIndex.set(null);
+		}
 		this.redraw();
 	}
 
@@ -152,6 +195,8 @@ export class TopdownAnnotator {
 		};
 		const updated = [...this.zonesIn(), next];
 		this.zonesOut.emit(updated);
+		this.selectedZoneId.set(next.id);
+		this.selectedVertexIndex.set(null);
 		this.polygonPoints.set([]);
 		this.preview.set(null);
 	}
@@ -180,6 +225,32 @@ export class TopdownAnnotator {
 		const updated = this.zonesIn().filter((z) => z.id !== id);
 		this.zonesOut.emit(updated);
 		this.selectedZoneId.set(null);
+		this.selectedVertexIndex.set(null);
+	}
+
+	deleteSelectedVertex() {
+		const id = this.selectedZoneId();
+		const idx = this.selectedVertexIndex();
+		if (!id || idx === null) return;
+
+		const zone = this.zonesIn().find((z) => z.id === id);
+		if (!zone || zone.poly.length <= 3 || idx < 0 || idx >= zone.poly.length) {
+			return;
+		}
+
+		const updatedPoly = zone.poly.filter((_, i) => i !== idx);
+		const updated = this.zonesIn().map((z) =>
+			z.id === id ? { ...z, poly: updatedPoly } : z,
+		);
+		this.zonesOut.emit(updated);
+		this.selectedVertexIndex.set(
+			updatedPoly.length > 0 ? Math.min(idx, updatedPoly.length - 1) : null,
+		);
+	}
+
+	clearSelection() {
+		this.selectedZoneId.set(null);
+		this.selectedVertexIndex.set(null);
 	}
 
 	changeSelectedType(newType: ZoneType) {
@@ -189,6 +260,89 @@ export class TopdownAnnotator {
 			z.id === id ? { ...z, type: newType } : z,
 		);
 		this.zonesOut.emit(updated);
+	}
+
+	private updateSelectedVertex(pt: Pt) {
+		const id = this.selectedZoneId();
+		const idx = this.selectedVertexIndex();
+		if (!id || idx === null) return;
+
+		const canvas = this.canvasRef().nativeElement;
+		if (canvas.width === 0 || canvas.height === 0) return;
+		const norm = pxToNorm(pt, canvas.width, canvas.height);
+		const updated = this.zonesIn().map((z) => {
+			if (z.id !== id || idx < 0 || idx >= z.poly.length) return z;
+			const poly = z.poly.map((p, i) => (i === idx ? norm : p));
+			return { ...z, poly };
+		});
+		this.zonesOut.emit(updated);
+	}
+
+	private insertVertex(insertIndex: number, pt: Pt) {
+		const id = this.selectedZoneId();
+		if (!id) return;
+
+		const canvas = this.canvasRef().nativeElement;
+		if (canvas.width === 0 || canvas.height === 0) return;
+		const norm = pxToNorm(pt, canvas.width, canvas.height);
+		const updated = this.zonesIn().map((z) => {
+			if (z.id !== id) return z;
+			const poly = [...z.poly];
+			poly.splice(insertIndex, 0, norm);
+			return { ...z, poly };
+		});
+		this.zonesOut.emit(updated);
+	}
+
+	private findSelectedVertexAtPoint(pt: Pt, maxDist: number): number | null {
+		const selected = this.selectedZone();
+		if (!selected) return null;
+		const canvas = this.canvasRef().nativeElement;
+		const maxDist2 = maxDist * maxDist;
+		let bestIdx: number | null = null;
+		let best = maxDist2;
+
+		selected.poly.forEach((norm, idx) => {
+			const px = normToPx(norm, canvas.width, canvas.height);
+			const d = distSq(pt, px);
+			if (d <= best) {
+				best = d;
+				bestIdx = idx;
+			}
+		});
+
+		return bestIdx;
+	}
+
+	private findSelectedEdgeAtPoint(
+		pt: Pt,
+		maxDist: number,
+	): { insertIndex: number; point: Pt } | null {
+		const selected = this.selectedZone();
+		if (!selected) return null;
+		const canvas = this.canvasRef().nativeElement;
+		let best: { insertIndex: number; point: Pt; dist: number } | null = null;
+
+		for (let i = 0; i < selected.poly.length; i++) {
+			const a = normToPx(selected.poly[i], canvas.width, canvas.height);
+			const b = normToPx(
+				selected.poly[(i + 1) % selected.poly.length],
+				canvas.width,
+				canvas.height,
+			);
+			const closest = closestPointOnSegment(pt, a, b);
+			const dist = Math.sqrt(distSq(pt, closest));
+			if (dist <= maxDist && (!best || dist < best.dist)) {
+				best = { insertIndex: i + 1, point: closest, dist };
+			}
+		}
+
+		return best ? { insertIndex: best.insertIndex, point: best.point } : null;
+	}
+
+	private selectedZone(): Zone | null {
+		const id = this.selectedZoneId();
+		return id ? (this.zonesIn().find((z) => z.id === id) ?? null) : null;
 	}
 
 	private findZoneAtPoint(pt: Pt): Zone | null {
@@ -232,7 +386,14 @@ export class TopdownAnnotator {
 				x: p[0] * canvas.width,
 				y: p[1] * canvas.height,
 			}));
-			this.drawPoly(ctx, polyPx, zoneColor(z.type), false, isSelected);
+			this.drawPoly(
+				ctx,
+				polyPx,
+				zoneColor(z.type),
+				false,
+				isSelected,
+				isSelected ? this.selectedVertexIndex() : null,
+			);
 		}
 
 		// Draw polygon in progress
@@ -256,6 +417,7 @@ export class TopdownAnnotator {
 		stroke: string,
 		dashed = false,
 		selected = false,
+		selectedVertexIdx: number | null = null,
 	) {
 		if (pts.length === 0) return;
 		ctx.save();
@@ -272,9 +434,13 @@ export class TopdownAnnotator {
 
 		// Draw handles for selected zones
 		if (selected) {
-			ctx.fillStyle = '#ffffff';
-			for (const pt of pts) {
+			for (let i = 0; i < pts.length; i++) {
+				const pt = pts[i];
+				ctx.fillStyle = i === selectedVertexIdx ? '#facc15' : '#ffffff';
+				ctx.strokeStyle = '#111827';
+				ctx.lineWidth = 1.5;
 				ctx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+				ctx.strokeRect(pt.x - 3, pt.y - 3, 6, 6);
 			}
 		}
 		ctx.restore();
@@ -283,6 +449,25 @@ export class TopdownAnnotator {
 
 function clamp(v: number, min: number, max: number) {
 	return Math.max(min, Math.min(max, v));
+}
+
+function distSq(a: Pt, b: Pt): number {
+	const dx = a.x - b.x;
+	const dy = a.y - b.y;
+	return dx * dx + dy * dy;
+}
+
+function closestPointOnSegment(pt: Pt, a: Pt, b: Pt): Pt {
+	const dx = b.x - a.x;
+	const dy = b.y - a.y;
+	const lenSq = dx * dx + dy * dy;
+	if (lenSq <= 1e-9) return a;
+
+	const t = clamp(((pt.x - a.x) * dx + (pt.y - a.y) * dy) / lenSq, 0, 1);
+	return {
+		x: a.x + t * dx,
+		y: a.y + t * dy,
+	};
 }
 
 function zoneColor(type: ZoneType) {

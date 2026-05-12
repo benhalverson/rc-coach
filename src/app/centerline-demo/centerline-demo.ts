@@ -48,7 +48,8 @@ export class CenterlineDemoComponent {
 
 	// Derived from track store
 	centerlineParams = computed(() => {
-		const centerline = this.store.centerline();
+		const centerline =
+			this.store.derivedCenterline()?.sampledPoints ?? this.store.centerline();
 		if (!centerline || centerline.length < 2) return null;
 		return parameterizeCenterline(centerline);
 	});
@@ -160,17 +161,13 @@ export class CenterlineDemoComponent {
 		const lateralVel = v * Math.sin(delta);
 		const newD = state.d + lateralVel * dt;
 
-		// Get pose at new arc-length
-		const { heading, curvature } = poseAtArcLength(params, clampedS);
-
-		// Update heading to match centerline direction + lateral error correction
-		const dHeading = curvature * sRate * dt;
-		const newPsi = heading + dHeading;
+		// Use the local centerline tangent as the vehicle nose direction.
+		const { heading } = poseAtArcLength(params, clampedS);
 
 		this.vehicleState.set({
 			s: clampedS,
 			d: newD,
-			psi: newPsi,
+			psi: heading,
 			v: v,
 		});
 	}
@@ -237,32 +234,37 @@ export class CenterlineDemoComponent {
 			ctx.stroke();
 		});
 
-		// Draw vehicle (blue circle with white outline for visibility)
+		// Draw vehicle marker and nose direction.
 		const state = this.vehicleState();
 		const pose = poseAtArcLength(params, state.s);
 		const vehicleX = pose.pos[0] * scaleX;
 		const vehicleY = pose.pos[1] * scaleY;
+		const heading = pose.heading;
+		const vehicleRadius = 10;
 
-		// Draw vehicle (blue circle with white outline for visibility)
-		ctx.fillStyle = 'blue';
-		ctx.strokeStyle = 'white';
-		ctx.lineWidth = 3;
+		ctx.fillStyle = '#2563eb';
+		ctx.strokeStyle = '#93c5fd';
+		ctx.lineWidth = 2;
 		ctx.beginPath();
-		ctx.arc(vehicleX, vehicleY, 8, 0, 2 * Math.PI);
+		ctx.arc(vehicleX, vehicleY, vehicleRadius, 0, 2 * Math.PI);
 		ctx.fill();
 		ctx.stroke();
 
-		// Draw heading indicator (line from vehicle)
-		ctx.strokeStyle = 'yellow';
-		ctx.lineWidth = 3;
+		ctx.strokeStyle = '#60a5fa';
+		ctx.lineWidth = 4;
+		ctx.lineCap = 'round';
 		ctx.beginPath();
-		ctx.moveTo(vehicleX, vehicleY);
-		const headingLen = 20;
+		const headingLen = 26;
+		ctx.moveTo(
+			vehicleX + vehicleRadius * 0.35 * Math.cos(heading),
+			vehicleY + vehicleRadius * 0.35 * Math.sin(heading),
+		);
 		ctx.lineTo(
-			vehicleX + headingLen * Math.cos(state.psi),
-			vehicleY + headingLen * Math.sin(state.psi),
+			vehicleX + headingLen * Math.cos(heading),
+			vehicleY + headingLen * Math.sin(heading),
 		);
 		ctx.stroke();
+		ctx.lineCap = 'butt';
 	}
 
 	toggleSimulation(): void {
@@ -270,10 +272,13 @@ export class CenterlineDemoComponent {
 	}
 
 	resetVehicle(): void {
+		const params = this.centerlineParams();
+		const heading = params ? poseAtArcLength(params, 0).heading : 0;
+
 		this.vehicleState.set({
 			s: 0,
 			d: 0,
-			psi: 0,
+			psi: heading,
 			v: 0,
 		});
 		this.steeringAngle.set(0);

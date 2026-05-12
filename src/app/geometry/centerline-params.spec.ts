@@ -1,5 +1,9 @@
 import type { Vec2 } from '../track-types';
-import { nearestArcLength, parameterizeCenterline, poseAtArcLength } from './centerline-params';
+import {
+	nearestArcLength,
+	parameterizeCenterline,
+	poseAtArcLength,
+} from './centerline-params';
 
 const STRAIGHT_LINE: Vec2[] = [
 	[0, 0],
@@ -62,6 +66,11 @@ describe('parameterizeCenterline', () => {
 		expect(headings[0]).toBeCloseTo(0);
 	});
 
+	it('uses the final segment heading at the end of an open line', () => {
+		const { headings } = parameterizeCenterline(L_SHAPE);
+		expect(headings[2]).toBeCloseTo(Math.PI / 2);
+	});
+
 	it('computes correct arc-lengths for L-shaped polyline', () => {
 		const { arcLengths, totalLength } = parameterizeCenterline(L_SHAPE);
 
@@ -109,15 +118,15 @@ describe('poseAtArcLength', () => {
 		expect(pos[1]).toBeCloseTo(0);
 	});
 
-	it('wraps negative s to valid range', () => {
+	it('clamps negative s to the start', () => {
 		const params = parameterizeCenterline(STRAIGHT_LINE);
 		const { pos } = poseAtArcLength(params, -50);
 
-		expect(pos[0]).toBeCloseTo(50);
+		expect(pos[0]).toBeCloseTo(0);
 		expect(pos[1]).toBeCloseTo(0);
 	});
 
-	it('wraps a negative full lap to the start', () => {
+	it('keeps a negative full length at the start', () => {
 		const params = parameterizeCenterline(NORMALIZED_LINE);
 		const { pos } = poseAtArcLength(params, -params.totalLength);
 
@@ -125,12 +134,28 @@ describe('poseAtArcLength', () => {
 		expect(pos[1]).toBeCloseTo(0, 5);
 	});
 
-	it('wraps s beyond totalLength', () => {
+	it('clamps s beyond totalLength to the end', () => {
 		const params = parameterizeCenterline(STRAIGHT_LINE);
 		const { pos } = poseAtArcLength(params, 150);
 
-		expect(pos[0]).toBeCloseTo(50);
+		expect(pos[0]).toBeCloseTo(100);
 		expect(pos[1]).toBeCloseTo(0);
+	});
+
+	it('returns the end point at exactly totalLength', () => {
+		const params = parameterizeCenterline(NORMALIZED_LINE);
+		const { pos, heading } = poseAtArcLength(params, params.totalLength);
+
+		expect(pos[0]).toBeCloseTo(1, 5);
+		expect(pos[1]).toBeCloseTo(0, 5);
+		expect(heading).toBeCloseTo(0);
+	});
+
+	it('uses the active segment heading instead of turning toward the first point', () => {
+		const params = parameterizeCenterline(L_SHAPE);
+		const { heading } = poseAtArcLength(params, 150);
+
+		expect(heading).toBeCloseTo(Math.PI / 2);
 	});
 
 	it('returns position at a known corner of L-shape', () => {
@@ -190,5 +215,13 @@ describe('nearestArcLength', () => {
 		const { s } = nearestArcLength(params, [-999, 0]);
 
 		expect(s).toBeCloseTo(0);
+	});
+
+	it('does not project onto an invented closing segment', () => {
+		const params = parameterizeCenterline(L_SHAPE);
+		const { s, distance } = nearestArcLength(params, [50, 60]);
+
+		expect(s).toBeCloseTo(160);
+		expect(distance).toBeCloseTo(50);
 	});
 });

@@ -1,19 +1,33 @@
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { Opencv } from '../opencv';
-import type { TrackDef } from '../track-types';
+import { TRACK_SCHEMA_VERSION, type TrackDef } from '../track-types';
 import { isValidDimension, TrackStore } from './track-store';
 
 const VALID_TRACK_DEF: TrackDef = {
+	schemaVersion: TRACK_SCHEMA_VERSION,
 	id: 'test-id',
 	name: 'Test Track',
 	widthMeters: 20,
 	heightMeters: 12,
 	topdownPx: { w: 800, h: 450 },
 	zones: [
-		{ id: 'z1', type: 'jump', poly: [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3], [0.1, 0.3]] },
+		{
+			id: 'z1',
+			type: 'jump',
+			poly: [
+				[0.1, 0.1],
+				[0.3, 0.1],
+				[0.3, 0.3],
+				[0.1, 0.3],
+			],
+		},
 	],
-	centerline: [[0.1, 0.5], [0.5, 0.5], [0.9, 0.5]],
+	centerline: [
+		[0.1, 0.5],
+		[0.5, 0.5],
+		[0.9, 0.5],
+	],
 	import: {
 		srcImageName: 'screenshot.png',
 		srcQuadPx: [
@@ -57,6 +71,16 @@ function makeCanvas(w = 1600, h = 900): HTMLCanvasElement {
 	c.height = h;
 	return c;
 }
+
+const VALID_IMPORT_META = {
+	srcImageName: 'x.png',
+	srcQuadPx: [
+		{ x: 0, y: 0 },
+		{ x: 100, y: 0 },
+		{ x: 100, y: 100 },
+		{ x: 0, y: 100 },
+	],
+};
 
 describe('isValidDimension', () => {
 	it('returns true for positive finite numbers', () => {
@@ -147,7 +171,9 @@ describe('TrackStore – quad validation', () => {
 	});
 
 	it('onImportTrackJsonFile: sets importJsonError for malformed JSON', async () => {
-		const file = new File(['not-valid-json{{{'], 'track.json', { type: 'application/json' });
+		const file = new File(['not-valid-json{{{'], 'track.json', {
+			type: 'application/json',
+		});
 		const ev = makeFileEvent(file);
 
 		store.onImportTrackJsonFile(ev);
@@ -159,19 +185,23 @@ describe('TrackStore – quad validation', () => {
 
 	it('onImportTrackJsonFile: sets importJsonError for JSON missing required fields', async () => {
 		const partial = { id: 'x', name: 'oops' }; // missing topdownPx, widthMeters, heightMeters
-		const file = new File([JSON.stringify(partial)], 'track.json', { type: 'application/json' });
+		const file = new File([JSON.stringify(partial)], 'track.json', {
+			type: 'application/json',
+		});
 		const ev = makeFileEvent(file);
 
 		store.onImportTrackJsonFile(ev);
 		await new Promise((r) => setTimeout(r, 50));
 
 		expect(store.importTrack()).toBeNull();
-		expect(store.importJsonError()).toMatch(/missing required fields|must contain/i);
+		expect(store.importJsonError()).toMatch(/topdownPx is required/i);
 	});
 
 	it('onImportTrackJsonFile: clears previous importJsonError on new attempt', async () => {
 		// Set an error first
-		const badFile = new File(['{bad'], 'track.json', { type: 'application/json' });
+		const badFile = new File(['{bad'], 'track.json', {
+			type: 'application/json',
+		});
 		store.onImportTrackJsonFile(makeFileEvent(badFile));
 		await new Promise((r) => setTimeout(r, 50));
 		expect(store.importJsonError()).not.toBeNull();
@@ -199,6 +229,7 @@ describe('TrackStore – quad validation', () => {
 		store.applyImport();
 
 		expect(store.name()).toBe('Test Track');
+		expect(store.trackId()).toBe('test-id');
 		expect(store.widthMeters()).toBe(20);
 		expect(store.heightMeters()).toBe(12);
 		expect(store.zones()).toEqual(VALID_TRACK_DEF.zones);
@@ -287,7 +318,37 @@ describe('TrackStore – quad validation', () => {
 
 		const def = store.trackDef();
 		expect(def).not.toBeNull();
+		expect(def?.schemaVersion).toBe(TRACK_SCHEMA_VERSION);
 		expect(def?.import).toBeUndefined();
+	});
+
+	it('trackDef: keeps a stable id across repeated reads', () => {
+		store.topDown.set(makeCanvas(400, 300));
+		store.name.set('My Track');
+
+		const first = store.trackDef()?.id;
+		const second = store.trackDef()?.id;
+
+		expect(first).toBeTruthy();
+		expect(second).toBe(first);
+	});
+
+	it('trackDef: exports raw centerline while derivedCenterline remains internal', () => {
+		const raw: [number, number][] = [
+			[0, 0.5],
+			[0.5, 0.1],
+			[1, 0.5],
+		];
+		store.topDown.set(makeCanvas(400, 300));
+		store.centerline.set(raw);
+
+		const def = store.trackDef();
+
+		expect(def?.centerline).toEqual(raw);
+		expect(store.derivedCenterline()?.sampledPoints.length).toBeGreaterThan(
+			raw.length,
+		);
+		expect(def).not.toHaveProperty('derivedCenterline');
 	});
 
 	it('quadError starts as null', () => {
@@ -381,7 +442,9 @@ describe('TrackStore – quad validation', () => {
 	});
 
 	it('sets warpError and stays on quad step when cv.ready() rejects', async () => {
-		readySpy.mockRejectedValue(new Error('Failed to load /assets/opencv/opencv.js'));
+		readySpy.mockRejectedValue(
+			new Error('Failed to load /assets/opencv/opencv.js'),
+		);
 
 		await TestBed.runInInjectionContext(() => store.onQuad(validQuad));
 
@@ -433,37 +496,51 @@ describe('TrackStore – scale calibration validation', () => {
 
 		it('reports an error when width is zero', () => {
 			store.widthMeters.set(0);
-			expect(store.scaleErrors()).toContain('Width must be a positive finite number.');
+			expect(store.scaleErrors()).toContain(
+				'Width must be a positive finite number.',
+			);
 		});
 
 		it('reports an error when width is negative', () => {
 			store.widthMeters.set(-5);
-			expect(store.scaleErrors()).toContain('Width must be a positive finite number.');
+			expect(store.scaleErrors()).toContain(
+				'Width must be a positive finite number.',
+			);
 		});
 
 		it('reports an error when width is NaN', () => {
 			store.widthMeters.set(Number.NaN);
-			expect(store.scaleErrors()).toContain('Width must be a positive finite number.');
+			expect(store.scaleErrors()).toContain(
+				'Width must be a positive finite number.',
+			);
 		});
 
 		it('reports an error when width is Infinity', () => {
 			store.widthMeters.set(Number.POSITIVE_INFINITY);
-			expect(store.scaleErrors()).toContain('Width must be a positive finite number.');
+			expect(store.scaleErrors()).toContain(
+				'Width must be a positive finite number.',
+			);
 		});
 
 		it('reports an error when height is zero', () => {
 			store.heightMeters.set(0);
-			expect(store.scaleErrors()).toContain('Height must be a positive finite number.');
+			expect(store.scaleErrors()).toContain(
+				'Height must be a positive finite number.',
+			);
 		});
 
 		it('reports an error when height is negative', () => {
 			store.heightMeters.set(-3);
-			expect(store.scaleErrors()).toContain('Height must be a positive finite number.');
+			expect(store.scaleErrors()).toContain(
+				'Height must be a positive finite number.',
+			);
 		});
 
 		it('reports an error when height is NaN', () => {
 			store.heightMeters.set(Number.NaN);
-			expect(store.scaleErrors()).toContain('Height must be a positive finite number.');
+			expect(store.scaleErrors()).toContain(
+				'Height must be a positive finite number.',
+			);
 		});
 
 		it('reports both errors when both dimensions are invalid', () => {
@@ -562,7 +639,9 @@ describe('TrackStore – scale calibration validation', () => {
 			]);
 			store.widthMeters.set(Number.NaN);
 
-			expect(store.exportErrors()).toContain('Track dimensions must be greater than 0.');
+			expect(store.exportErrors()).toContain(
+				'Track dimensions must be greater than 0.',
+			);
 		});
 	});
 
@@ -628,6 +707,14 @@ describe('TrackStore – scale calibration validation', () => {
 			expect(store.importPngError()).toBeNull();
 		});
 
+		it('blocks import when topdown.png dimensions do not match track.json', () => {
+			store.importTopdownImg.set(makeImage(999, 450));
+			store.importTrack.set(VALID_TRACK_DEF);
+
+			expect(store.canImport()).toBe(false);
+			expect(store.importCompatibilityError()).toMatch(/do not match/);
+		});
+
 		it('is cleared by resetAll()', () => {
 			store.importJsonError.set('json failure');
 			store.importPngError.set('png failure');
@@ -637,8 +724,9 @@ describe('TrackStore – scale calibration validation', () => {
 		});
 
 		it('is cleared by applyImport() after a successful import', () => {
-			const img = new Image();
+			const img = makeImage(100, 100);
 			const track = {
+				schemaVersion: TRACK_SCHEMA_VERSION,
 				id: 'test',
 				name: 'Test Track',
 				widthMeters: 20,
@@ -646,7 +734,7 @@ describe('TrackStore – scale calibration validation', () => {
 				topdownPx: { w: 100, h: 100 },
 				zones: [],
 				centerline: [],
-				import: { srcImageName: 'test.png', srcQuadPx: [] },
+				import: VALID_IMPORT_META,
 			} as Parameters<typeof store.importTrack.set>[0];
 
 			store.importTopdownImg.set(img);
@@ -695,14 +783,17 @@ describe('TrackStore – scale calibration validation', () => {
 					(this.onload as (() => void) | null)?.();
 				},
 			};
-			(globalThis as { FileReader?: unknown }).FileReader = function () {
-				return mockReader;
-			};
+			(globalThis as { FileReader?: unknown }).FileReader =
+				function MockFileReader() {
+					return mockReader;
+				};
 
 			const input = document.createElement('input');
 			input.type = 'file';
 			Object.defineProperty(input, 'files', {
-				value: [new File([content], 'track.json', { type: 'application/json' })],
+				value: [
+					new File([content], 'track.json', { type: 'application/json' }),
+				],
 				configurable: true,
 			});
 			const ev = { target: input } as unknown as Event;
@@ -713,54 +804,78 @@ describe('TrackStore – scale calibration validation', () => {
 
 		it('accepts a valid track.json', () => {
 			triggerImport({
+				schemaVersion: TRACK_SCHEMA_VERSION,
 				topdownPx: { w: 1600, h: 900 },
 				widthMeters: 20,
 				heightMeters: 12,
 				name: 'Test',
 				id: 'abc',
 				zones: [],
-				import: { srcImageName: 'x.png', srcQuadPx: [] },
+				centerline: [],
+				import: VALID_IMPORT_META,
 			});
 			expect(store.importTrack()?.widthMeters).toBe(20);
 		});
 
+		it('accepts legacy unversioned track.json with a warning', () => {
+			triggerImport({
+				topdownPx: { w: 1600, h: 900 },
+				widthMeters: 20,
+				heightMeters: 12,
+				name: 'Test',
+				id: 'abc',
+				zones: [],
+				centerline: [],
+				import: VALID_IMPORT_META,
+			});
+
+			expect(store.importTrack()?.schemaVersion).toBe(TRACK_SCHEMA_VERSION);
+			expect(store.importWarnings().join(' ')).toMatch(/Legacy unversioned/i);
+		});
+
 		it('rejects track.json with zero widthMeters', () => {
 			triggerImport({
+				schemaVersion: TRACK_SCHEMA_VERSION,
 				topdownPx: { w: 1600, h: 900 },
 				widthMeters: 0,
 				heightMeters: 12,
 				name: 'Test',
 				id: 'abc',
 				zones: [],
-				import: { srcImageName: 'x.png', srcQuadPx: [] },
+				centerline: [],
+				import: VALID_IMPORT_META,
 			});
 			expect(store.importTrack()).toBeNull();
 		});
 
 		it('rejects track.json with negative heightMeters', () => {
 			triggerImport({
+				schemaVersion: TRACK_SCHEMA_VERSION,
 				topdownPx: { w: 1600, h: 900 },
 				widthMeters: 20,
 				heightMeters: -5,
 				name: 'Test',
 				id: 'abc',
 				zones: [],
-				import: { srcImageName: 'x.png', srcQuadPx: [] },
+				centerline: [],
+				import: VALID_IMPORT_META,
 			});
 			expect(store.importTrack()).toBeNull();
 		});
 
 		it('rejects track.json with null heightMeters', () => {
 			triggerImport({
+				schemaVersion: TRACK_SCHEMA_VERSION,
 				topdownPx: { w: 1600, h: 900 },
 				widthMeters: 20,
 				heightMeters: null,
 				name: 'Test',
 				id: 'abc',
 				zones: [],
-				import: { srcImageName: 'x.png', srcQuadPx: [] },
+				centerline: [],
+				import: VALID_IMPORT_META,
 			});
 			expect(store.importTrack()).toBeNull();
+		});
 	});
-});
 });
