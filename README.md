@@ -59,7 +59,8 @@ The app is a single-page editor. The typical session looks like this:
 - **Export** writes `topdown.png` (the rectified canvas) and `track.json` (scale, zones, centerline, and source quad metadata) as local file downloads.
 - **Import** reloads a previous session from those two files. The import performs **strict schema validation** on `track.json`: all required fields are checked, the `schemaVersion` must match `v1` (or a legacy unversioned file is accepted with a warning), and errors are surfaced immediately in the UI.
 - Scale calibration stores a single pixels-per-meter value applied uniformly to both axes. This assumes the rectified image has isotropic scaling.
-- There is **no cloud storage or sync**. Sessions only persist via the exported files on your local machine.
+- Cloud persistence is available through Worker API endpoints backed by **D1 + R2** (see [`docs/CLOUD_TRACK_LIBRARY_CONTRACT.md`](docs/CLOUD_TRACK_LIBRARY_CONTRACT.md)).
+- Local export/import remains fully supported as a reliable fallback.
 
 ---
 
