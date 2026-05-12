@@ -57,6 +57,26 @@ describe('handleTrackLibraryRequest', () => {
 		expect(imageResponse?.headers.get('content-type')).toBe('image/png');
 		expect(new Uint8Array(await imageResponse!.arrayBuffer())).toEqual(imageBytes);
 	});
+
+	it('rejects unsafe track ids', async () => {
+		const env = createMockEnv();
+		const track = createTrack();
+		track.id = 'track/1';
+
+		const response = await handleTrackLibraryRequest(
+			new Request('https://example.com/api/tracks', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					track,
+					topdownPngBase64: encodeBase64(new Uint8Array([137, 80, 78, 71])),
+				}),
+			}),
+			env,
+		);
+
+		expect(response?.status).toBe(400);
+	});
 });
 
 function createTrack(): TrackDef {
@@ -125,6 +145,11 @@ function createMockEnv(): TrackLibraryEnv {
 							};
 						},
 						async first<T>() {
+							if (sql.includes('SELECT created_at')) {
+								const row = rows.get(values[0] as string);
+								if (!row) return null;
+								return { created_at: row.created_at } as T;
+							}
 							if (sql.includes('SELECT id, track_json')) {
 								const row = rows.get(values[0] as string);
 								if (!row) return null;
@@ -155,8 +180,8 @@ function createMockEnv(): TrackLibraryEnv {
 								topdown_h_px: values[5] as number,
 								image_key: values[6] as string,
 								track_json: values[7] as string,
-								created_at: values[9] as string,
-								updated_at: values[10] as string,
+								created_at: values[8] as string,
+								updated_at: values[9] as string,
 							});
 						},
 					};

@@ -170,6 +170,12 @@ async function saveTrack(
 		return jsonError(400, trackValidation.errors.join(' '));
 	}
 	const track = trackValidation.track;
+	if (!isSafeTrackId(track.id)) {
+		return jsonError(
+			400,
+			'Track id must contain only letters, numbers, underscores, and hyphens.',
+		);
+	}
 
 	const imageB64 = body['topdownPngBase64'];
 	if (typeof imageB64 !== 'string' || imageB64.trim().length === 0) {
@@ -184,17 +190,27 @@ async function saveTrack(
 		return jsonError(413, 'topdownPngBase64 exceeds max allowed size.');
 	}
 
-	const imageKey = `tracks/${sanitizeTrackId(track.id)}/topdown.png`;
+	const imageKey = `tracks/${track.id}/topdown.png`;
 	await images.put(imageKey, imageBytes, {
 		httpMetadata: { contentType: 'image/png' },
 	});
 
 	const now = new Date().toISOString();
+	const existing = await db
+		.prepare(
+			`SELECT created_at
+			 FROM tracks
+			 WHERE id = ?`,
+		)
+		.bind(track.id)
+		.first<Pick<TrackRow, 'created_at'>>();
+	const createdAt = existing?.created_at ?? now;
+
 	await db
 		.prepare(
 			`INSERT INTO tracks (
 				 id, name, width_meters, height_meters, topdown_w_px, topdown_h_px, image_key, track_json, created_at, updated_at
-			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM tracks WHERE id = ?), ?), ?)
+			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(id) DO UPDATE SET
 				 name = excluded.name,
 				 width_meters = excluded.width_meters,
@@ -214,8 +230,7 @@ async function saveTrack(
 			track.topdownPx.h,
 			imageKey,
 			JSON.stringify(track),
-			track.id,
-			now,
+			createdAt,
 			now,
 		)
 		.run();
@@ -311,7 +326,16 @@ function readPositiveInt(value: string | null): number | null {
 function decodeBase64(input: string): Uint8Array | null {
 	try {
 		const normalized = input.replace(/\s+/g, '');
-		const binary = atob(normalized);
+		const atobFn = globalThis.atob;
+		if (typeof atobFn !== 'function') {
+			const bufferCtor = (globalThis as {
+				Buffer?: { from(data: string, encoding: string): Uint8Array };
+			}).Buffer;
+			if (!bufferCtor) return null;
+			return new Uint8Array(bufferCtor.from(normalized, 'base64'));
+		}
+
+		const binary = atobFn(normalized);
 		const bytes = new Uint8Array(binary.length);
 		for (let i = 0; i < binary.length; i++) {
 			bytes[i] = binary.charCodeAt(i);
@@ -320,10 +344,6 @@ function decodeBase64(input: string): Uint8Array | null {
 	} catch {
 		return null;
 	}
-}
-
-function sanitizeTrackId(trackId: string): string {
-	return trackId.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 async function parseJsonBody(request: Request): Promise<unknown> {
@@ -349,4 +369,8 @@ function jsonError(status: number, message: string): Response {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isSafeTrackId(trackId: string): boolean {
+	return /^[A-Za-z0-9_-]+$/.test(trackId);
 }

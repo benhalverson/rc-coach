@@ -61,6 +61,7 @@ Request body:
 Behavior:
 
 - `track` is validated against existing `TrackDef` export validation rules (non-draft).
+- `track.id` must match `^[A-Za-z0-9_-]+$`.
 - PNG bytes are decoded from `topdownPngBase64`.
 - Image is written to R2.
 - Metadata and serialized `track_json` are upserted in D1.
