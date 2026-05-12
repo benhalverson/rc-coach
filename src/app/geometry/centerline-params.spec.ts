@@ -1,17 +1,21 @@
+import type { Vec2 } from '../track-types';
 import { nearestArcLength, parameterizeCenterline, poseAtArcLength } from './centerline-params';
 
-// Straight horizontal line: (0,0) → (100,0)
-const STRAIGHT_LINE = [
+const STRAIGHT_LINE: Vec2[] = [
 	[0, 0],
 	[100, 0],
-] as [number, number][];
+];
 
-// L-shaped polyline: (0,0) → (100,0) → (100,100)
-const L_SHAPE = [
+const NORMALIZED_LINE: Vec2[] = [
+	[0, 0],
+	[1, 0],
+];
+
+const L_SHAPE: Vec2[] = [
 	[0, 0],
 	[100, 0],
 	[100, 100],
-] as [number, number][];
+];
 
 describe('parameterizeCenterline', () => {
 	it('throws for empty array', () => {
@@ -36,9 +40,25 @@ describe('parameterizeCenterline', () => {
 		expect(params.curvatures).toHaveLength(2);
 	});
 
+	it('computes totalLength correctly for a normalized horizontal line', () => {
+		const params = parameterizeCenterline([
+			[0, 0],
+			[0.5, 0],
+			[1, 0],
+		]);
+		expect(params.totalLength).toBeCloseTo(1, 6);
+	});
+
+	it('computes totalLength correctly for a diagonal line', () => {
+		const params = parameterizeCenterline([
+			[0, 0],
+			[1, 1],
+		]);
+		expect(params.totalLength).toBeCloseTo(Math.SQRT2, 6);
+	});
+
 	it('computes zero heading for a horizontal line', () => {
 		const { headings } = parameterizeCenterline(STRAIGHT_LINE);
-		// atan2(0, 100) = 0
 		expect(headings[0]).toBeCloseTo(0);
 	});
 
@@ -53,13 +73,11 @@ describe('parameterizeCenterline', () => {
 
 	it('computes non-zero curvature at the corner of an L-shape', () => {
 		const { curvatures } = parameterizeCenterline(L_SHAPE);
-		// The middle point is a 90° turn so curvature should be non-zero
 		expect(curvatures[1]).not.toBe(0);
 	});
 
 	it('computes zero curvature for a straight line', () => {
 		const { curvatures } = parameterizeCenterline(STRAIGHT_LINE);
-		// Both segments share the same heading → curvature ≈ 0
 		expect(curvatures[0]).toBeCloseTo(0);
 		expect(curvatures[1]).toBeCloseTo(0);
 	});
@@ -75,6 +93,14 @@ describe('poseAtArcLength', () => {
 		expect(heading).toBeCloseTo(0);
 	});
 
+	it('returns end point just before totalLength', () => {
+		const params = parameterizeCenterline(NORMALIZED_LINE);
+		const { pos } = poseAtArcLength(params, params.totalLength - 1e-9);
+
+		expect(pos[0]).toBeCloseTo(1, 3);
+		expect(pos[1]).toBeCloseTo(0, 3);
+	});
+
 	it('interpolates the midpoint correctly', () => {
 		const params = parameterizeCenterline(STRAIGHT_LINE);
 		const { pos } = poseAtArcLength(params, 50);
@@ -87,23 +113,28 @@ describe('poseAtArcLength', () => {
 		const params = parameterizeCenterline(STRAIGHT_LINE);
 		const { pos } = poseAtArcLength(params, -50);
 
-		// -50 % 100 = -50 → wrapped to 50
 		expect(pos[0]).toBeCloseTo(50);
 		expect(pos[1]).toBeCloseTo(0);
 	});
 
+	it('wraps a negative full lap to the start', () => {
+		const params = parameterizeCenterline(NORMALIZED_LINE);
+		const { pos } = poseAtArcLength(params, -params.totalLength);
+
+		expect(pos[0]).toBeCloseTo(0, 5);
+		expect(pos[1]).toBeCloseTo(0, 5);
+	});
+
 	it('wraps s beyond totalLength', () => {
 		const params = parameterizeCenterline(STRAIGHT_LINE);
-		// 150 % 100 = 50
 		const { pos } = poseAtArcLength(params, 150);
 
 		expect(pos[0]).toBeCloseTo(50);
 		expect(pos[1]).toBeCloseTo(0);
 	});
 
-	it('returns heading at a known corner of L-shape', () => {
+	it('returns position at a known corner of L-shape', () => {
 		const params = parameterizeCenterline(L_SHAPE);
-		// At s=100 we are at the corner point (100,0)
 		const { pos } = poseAtArcLength(params, 100);
 
 		expect(pos[0]).toBeCloseTo(100);
@@ -130,9 +161,16 @@ describe('nearestArcLength', () => {
 		expect(distance).toBeCloseTo(0);
 	});
 
+	it('finds the nearest point on a normalized perpendicular projection', () => {
+		const params = parameterizeCenterline(NORMALIZED_LINE);
+		const { s, distance } = nearestArcLength(params, [0.5, 0.1]);
+
+		expect(s).toBeCloseTo(0.5, 5);
+		expect(distance).toBeCloseTo(0.1, 5);
+	});
+
 	it('returns positive lateral error for a point above a horizontal line', () => {
 		const params = parameterizeCenterline(STRAIGHT_LINE);
-		// Point at (50, 10) – 10 units above the line
 		const { s, d, distance } = nearestArcLength(params, [50, 10]);
 
 		expect(s).toBeCloseTo(50);
@@ -142,7 +180,6 @@ describe('nearestArcLength', () => {
 
 	it('returns negative lateral error for a point below a horizontal line', () => {
 		const params = parameterizeCenterline(STRAIGHT_LINE);
-		// Point at (50, -10) – 10 units below the line
 		const { d } = nearestArcLength(params, [50, -10]);
 
 		expect(d).toBeCloseTo(-10);
@@ -150,7 +187,6 @@ describe('nearestArcLength', () => {
 
 	it('clamps projection to segment endpoints', () => {
 		const params = parameterizeCenterline(STRAIGHT_LINE);
-		// Point far before the start
 		const { s } = nearestArcLength(params, [-999, 0]);
 
 		expect(s).toBeCloseTo(0);

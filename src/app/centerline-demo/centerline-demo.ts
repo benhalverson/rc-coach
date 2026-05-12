@@ -1,4 +1,3 @@
-import { CommonModule } from '@angular/common';
 import {
 	ChangeDetectionStrategy,
 	Component,
@@ -36,8 +35,7 @@ interface VehicleState {
  */
 @Component({
 	selector: 'app-centerline-demo',
-	standalone: true,
-	imports: [CommonModule],
+	imports: [],
 	templateUrl: './centerline-demo.html',
 	styleUrl: './centerline-demo.css',
 	changeDetection: ChangeDetectionStrategy.OnPush,
@@ -205,8 +203,9 @@ export class CenterlineDemoComponent {
 			return;
 		}
 
-		// Compute scale: pixels per normalized unit
-		const scale = canvas.width / (this.store.topDownW() || canvas.width);
+		// Normalized [0,1] coords → canvas pixels.
+		const scaleX = canvas.width;
+		const scaleY = canvas.height;
 
 		// Draw centerline in red
 		ctx.strokeStyle = 'red';
@@ -214,8 +213,8 @@ export class CenterlineDemoComponent {
 		ctx.beginPath();
 		params.arcLengths.forEach((s, i) => {
 			const pose = poseAtArcLength(params, s);
-			const px = pose.pos[0] * scale;
-			const py = pose.pos[1] * scale;
+			const px = pose.pos[0] * scaleX;
+			const py = pose.pos[1] * scaleY;
 			if (i === 0) ctx.moveTo(px, py);
 			else ctx.lineTo(px, py);
 		});
@@ -228,8 +227,8 @@ export class CenterlineDemoComponent {
 		zones.forEach((zone: Zone) => {
 			ctx.beginPath();
 			zone.poly.forEach((pt: [number, number], i: number) => {
-				const px = pt[0] * scale;
-				const py = pt[1] * scale;
+				const px = pt[0] * scaleX;
+				const py = pt[1] * scaleY;
 				if (i === 0) ctx.moveTo(px, py);
 				else ctx.lineTo(px, py);
 			});
@@ -241,8 +240,8 @@ export class CenterlineDemoComponent {
 		// Draw vehicle (blue circle with white outline for visibility)
 		const state = this.vehicleState();
 		const pose = poseAtArcLength(params, state.s);
-		const vehicleX = pose.pos[0] * scale;
-		const vehicleY = pose.pos[1] * scale;
+		const vehicleX = pose.pos[0] * scaleX;
+		const vehicleY = pose.pos[1] * scaleY;
 
 		// Draw vehicle (blue circle with white outline for visibility)
 		ctx.fillStyle = 'blue';

@@ -1,8 +1,13 @@
 import { computed, effect, Injectable, inject, signal } from '@angular/core';
-import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, validateQuadTLTRBRBL, type Pt } from '../geometry/geometry';
+import { orderQuadTLTRBRBLv2, validateQuadTLTRBRBL, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import type { TrackDef, Vec2, Zone } from '../track-types';
-import { getTrackExportErrors, hasValidPositiveDimensions } from './track-validation';
+import { getTrackExportErrors } from './track-validation';
+
+/** Returns true only when v is a finite number greater than zero. */
+export function isValidDimension(v: unknown): v is number {
+	return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
 
 export type Step =
 	| 'scale'
@@ -58,8 +63,10 @@ export class TrackStore {
 	readonly pixelsPerMeter = computed(() => {
 		const pxDist = this.measurePixelDist();
 		const realDist = this.measureRealDist();
-		if (!pxDist || realDist <= 0) return null;
-		return pxDist / realDist;
+		if (!pxDist || !Number.isFinite(pxDist) || pxDist <= 0) return null;
+		if (!Number.isFinite(realDist) || realDist <= 0) return null;
+		const ppm = pxDist / realDist;
+		return Number.isFinite(ppm) && ppm > 0 ? ppm : null;
 	});
 
 	/**
@@ -81,17 +88,41 @@ export class TrackStore {
 	readonly canGoAnnotate = computed(
 		() =>
 			!!this.topDown() &&
-			hasValidPositiveDimensions(this.widthMeters(), this.heightMeters()) &&
+			this.scaleValid() &&
 			this.name().trim().length > 0,
 	);
 
+	readonly canGoAnnotateHint = computed<string | null>(() => {
+		if (this.canGoAnnotate()) return null;
+		const missing: string[] = [];
+		if (!this.topDown()) missing.push('top-down image');
+		if (!this.name().trim()) missing.push('track name');
+		if (!this.scaleValid()) missing.push('valid dimensions');
+		return missing.length ? `Missing: ${missing.join(', ')}.` : null;
+	});
+
+	readonly scaleErrors = computed(() => {
+		const errors: string[] = [];
+		const w = this.widthMeters();
+		const h = this.heightMeters();
+		if (!isValidDimension(w)) {
+			errors.push('Width must be a positive finite number.');
+		}
+		if (!isValidDimension(h)) {
+			errors.push('Height must be a positive finite number.');
+		}
+		return errors;
+	});
+
+	readonly scaleValid = computed(() => this.scaleErrors().length === 0);
+
 	readonly trackDef = computed<TrackDef | null>(() => {
 		const top = this.topDown();
-		const quad = this.quadPx();
-		const img = this.srcImage();
-		if (!top || !quad || !img) return null;
+		if (!top) return null;
 
-		return {
+		const quad = this.quadPx();
+
+		const def: TrackDef = {
 			id: crypto.randomUUID(),
 			name: this.name().trim(),
 			widthMeters: this.widthMeters(),
@@ -99,11 +130,16 @@ export class TrackStore {
 			topdownPx: { w: top.width, h: top.height },
 			zones: this.zones(),
 			centerline: this.centerline(),
-			import: {
+		};
+
+		if (quad) {
+			def.import = {
 				srcImageName: this.srcImageName(),
 				srcQuadPx: quad,
-			},
-		};
+			};
+		}
+
+		return def;
 	});
 
 	readonly exportErrors = computed(() =>
@@ -148,7 +184,7 @@ export class TrackStore {
 	/**
 	 * Accept user-picked quad points and run perspective warp to generate `topDown`.
 	 * Validates the quad (4 points, convex, non-degenerate) before ordering and warping.
-	 * Ensures TL/TR/BR/BL ordering and surfaces OpenCV errors without advancing steps.
+	 * Ensures TL/TR/BR/BL ordering and falls back to simple draw if OpenCV warp fails.
 	 * @param rawPts four points picked on the source image (any order).
 	 */
 	async onQuad(rawPts: Pt[]) {
@@ -157,7 +193,6 @@ export class TrackStore {
 
 		this.warpError.set(null);
 
-		// const ordered = orderQuadTLTRBRBL(rawPts);
 		const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
 
 		const w = img.naturalWidth || img.width;
@@ -183,20 +218,25 @@ export class TrackStore {
 		const outH = this.topDownH();
 
 		let canvas: HTMLCanvasElement;
+		let warpFailed = false;
 		try {
 			canvas = this.cv.warpPerspective(img, orderedv2, outW, outH);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
 			console.error('warpPerspective failed', err);
-			this.warpError.set(`Perspective warp failed: ${msg}`);
-			return;
+			canvas = this.fallbackDraw(img, outW, outH);
+			warpFailed = true;
 		}
 
-		if (this.isMostlyBlankCanvas(canvas)) {
-			this.warpError.set(
-				'Warp produced a blank image — the selected quad may be invalid. Please re-select the corners.',
+		const blankAfterWarp = this.isMostlyBlankCanvas(canvas);
+		if (blankAfterWarp) {
+			canvas = this.fallbackDraw(img, outW, outH);
+			this.quadError.set(
+				'Warp produced a blank result — using a scaled fallback. Try moving the corner handles further apart.',
 			);
-			return;
+		} else if (warpFailed) {
+			this.quadError.set(
+				'Perspective warp failed — using a scaled fallback. Check that all four corners are placed correctly.',
+			);
 		}
 
 		this.topDown.set(canvas);
@@ -219,6 +259,10 @@ export class TrackStore {
 		this.measurePt1.set(null);
 		this.measurePt2.set(null);
 		this.measureRealDist.set(0);
+		this.importTopdownImg.set(null);
+		this.importTrack.set(null);
+		this.importJsonError.set(null);
+		this.importPngError.set(null);
 	}
 
 	/**
@@ -251,6 +295,7 @@ export class TrackStore {
 
 		const w = top.width / ppm;
 		const h = top.height / ppm;
+		if (!isValidDimension(w) || !isValidDimension(h)) return;
 		this.widthMeters.set(w);
 		this.heightMeters.set(h);
 		this.measureMode.set(false);
@@ -324,6 +369,8 @@ export class TrackStore {
 	// Import session support
 	readonly importTopdownImg = signal<HTMLImageElement | null>(null);
 	readonly importTrack = signal<TrackDef | null>(null);
+	readonly importJsonError = signal<string | null>(null);
+	readonly importPngError = signal<string | null>(null);
 	readonly canImport = computed(
 		() => !!this.importTopdownImg() && !!this.importTrack(),
 	);
@@ -337,31 +384,37 @@ export class TrackStore {
 
 	/**
 	 * Handle selection of an existing top-down PNG for import.
-	 * Sets `importTopdownImg` once the image loads.
+	 * Sets `importTopdownImg` once the image loads, or sets `importPngError` on failure.
 	 * @param ev change event from a PNG file input.
 	 */
 	onImportTopdownFile(ev: Event) {
 		const input = ev.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
+		this.importPngError.set(null);
 		const url = URL.createObjectURL(file);
 		const img = new Image();
 		img.onload = () => {
 			URL.revokeObjectURL(url);
 			this.importTopdownImg.set(img);
 		};
+		img.onerror = () => {
+			URL.revokeObjectURL(url);
+			this.importPngError.set('Failed to load image. Make sure the file is a valid PNG.');
+		};
 		img.src = url;
 	}
 
 	/**
 	 * Handle selection of a previously exported `track.json` for import.
-	 * Parses and minimally validates shape, then sets `importTrack`.
+	 * Parses and validates shape, then sets `importTrack` or `importJsonError`.
 	 * @param ev change event from a JSON file input.
 	 */
 	onImportTrackJsonFile(ev: Event) {
 		const input = ev.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
+		this.importJsonError.set(null);
 		const reader = new FileReader();
 		reader.onload = () => {
 			try {
@@ -369,11 +422,17 @@ export class TrackStore {
 				const json = JSON.parse(raw) as TrackDef;
 				if (
 					!json ||
+					typeof json !== 'object' ||
 					!json.topdownPx ||
-					!json.widthMeters ||
-					!json.heightMeters
+					!isValidDimension(json.topdownPx.w) ||
+					!isValidDimension(json.topdownPx.h) ||
+					!isValidDimension(json.widthMeters) ||
+					!isValidDimension(json.heightMeters) ||
+					typeof json.name !== 'string'
 				) {
-					console.warn('Invalid track.json');
+					this.importJsonError.set(
+						'Invalid track.json: file must contain name, widthMeters, heightMeters, and topdownPx fields.',
+					);
 					return;
 				}
 				// Discard zones that are structurally invalid (< 3 points)
@@ -386,8 +445,9 @@ export class TrackStore {
 					json.zones = [];
 				}
 				this.importTrack.set(json);
-			} catch (e) {
-				console.error('Failed to parse track.json', e);
+				this.importJsonError.set(null);
+			} catch {
+				this.importJsonError.set('Failed to parse track.json: file is not valid JSON.');
 			}
 		};
 		reader.readAsText(file);
@@ -426,6 +486,8 @@ export class TrackStore {
 
 		this.importTopdownImg.set(null);
 		this.importTrack.set(null);
+		this.importJsonError.set(null);
+		this.importPngError.set(null);
 		this.step.set('annotate');
 	}
 
