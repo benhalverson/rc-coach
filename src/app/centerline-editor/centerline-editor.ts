@@ -35,6 +35,11 @@ export class CenterlineEditor {
 	readonly simplifyTolerancePx = signal(4);
 	readonly selectedPointIndex = signal<number | null>(null);
 	readonly pointCount = computed(() => this.pts().length);
+	readonly isUndoAvailable = computed(() => this.historyIndex() > 0);
+	readonly isRedoAvailable = computed(() => {
+		const idx = this.historyIndex();
+		return idx >= 0 && idx < this.history().length - 1;
+	});
 	readonly selectedPoint = computed(() => {
 		const idx = this.selectedPointIndex();
 		if (idx === null) return null;
@@ -72,7 +77,7 @@ export class CenterlineEditor {
 		if (!pt) return;
 		const idx = this.findNearest(pt, 10);
 		if (idx !== null) {
-			this.pushHistory();
+			this.beginHistoryChange();
 			this.draggingIdx.set(idx);
 			this.selectedPointIndex.set(idx);
 			this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
@@ -80,12 +85,13 @@ export class CenterlineEditor {
 		}
 
 		// add new point
-		this.pushHistory();
+		this.beginHistoryChange();
 		const next = this.applySnapAndClamp(pt);
+		const nextIndex = this.pts().length;
 		this.pts.update((ps) => [...ps, next]);
-		this.selectedPointIndex.set(this.pts().length - 1);
+		this.selectedPointIndex.set(nextIndex);
 		this.emitLine();
-		this.saveCurrentToHistory();
+		this.commitHistoryState();
 		this.redraw();
 	}
 
@@ -108,7 +114,7 @@ export class CenterlineEditor {
 			this.canvasRef().nativeElement.releasePointerCapture(ev.pointerId);
 			// Emit final position after drag completes.
 			this.emitLine();
-			this.saveCurrentToHistory();
+			this.commitHistoryState();
 		}
 	}
 
@@ -118,11 +124,11 @@ export class CenterlineEditor {
 
 	clearLine() {
 		if (this.pts().length === 0) return;
-		this.pushHistory();
+		this.beginHistoryChange();
 		this.pts.set([]);
 		this.selectedPointIndex.set(null);
 		this.emitLine();
-		this.saveCurrentToHistory();
+		this.commitHistoryState();
 		this.redraw();
 	}
 
@@ -154,11 +160,11 @@ export class CenterlineEditor {
 		if (points.length < 3) return;
 		const simplified = simplifyPolyline(points, this.simplifyTolerancePx());
 		if (simplified.length === points.length) return;
-		this.pushHistory();
+		this.beginHistoryChange();
 		this.pts.set(simplified);
 		this.selectedPointIndex.set(null);
 		this.emitLine();
-		this.saveCurrentToHistory();
+		this.commitHistoryState();
 		this.redraw();
 	}
 
@@ -167,11 +173,11 @@ export class CenterlineEditor {
 		if (idx === null) return;
 		const points = this.pts();
 		if (idx < 0 || idx >= points.length) return;
-		this.pushHistory();
+		this.beginHistoryChange();
 		this.pts.set(points.filter((_, i) => i !== idx));
 		this.selectedPointIndex.set(null);
 		this.emitLine();
-		this.saveCurrentToHistory();
+		this.commitHistoryState();
 		this.redraw();
 	}
 
@@ -180,14 +186,14 @@ export class CenterlineEditor {
 		if (idx === null) return;
 		const points = this.pts();
 		if (idx < 0 || idx >= points.length) return;
-		this.pushHistory();
+		this.beginHistoryChange();
 		const next = this.applySnapAndClamp({
 			x: points[idx].x + dx,
 			y: points[idx].y + dy,
 		});
 		this.pts.set(points.map((p, i) => (i === idx ? next : p)));
 		this.emitLine();
-		this.saveCurrentToHistory();
+		this.commitHistoryState();
 		this.redraw();
 	}
 
@@ -205,24 +211,34 @@ export class CenterlineEditor {
 		this.selectedPointIndex.set(idx === null ? 0 : (idx + 1) % total);
 	}
 
-	canUndo() {
-		return this.historyIndex() > 0;
-	}
-
-	canRedo() {
-		const idx = this.historyIndex();
-		return idx >= 0 && idx < this.history().length - 1;
-	}
-
 	onSmoothPreviewSamplesChange(rawValue: string) {
 		const value = Number(rawValue);
+		if (!Number.isFinite(value)) return;
 		this.smoothPreviewSamples.set(clamp(Math.round(value), 3, 30));
 		this.redraw();
+	}
+
+	onSmoothPreviewSamplesInput(event: Event) {
+		const target = event.target;
+		if (!(target instanceof HTMLInputElement)) return;
+		this.onSmoothPreviewSamplesChange(target.value);
+	}
+
+	onSnapToggle(event: Event) {
+		const target = event.target;
+		if (!(target instanceof HTMLInputElement)) return;
+		this.snapEnabled.set(target.checked);
 	}
 
 	onSmoothPreviewToggle(enabled: boolean) {
 		this.smoothPreviewEnabled.set(enabled);
 		this.redraw();
+	}
+
+	onSmoothPreviewToggleEvent(event: Event) {
+		const target = event.target;
+		if (!(target instanceof HTMLInputElement)) return;
+		this.onSmoothPreviewToggle(target.checked);
 	}
 
 	private syncFromInput() {
@@ -232,6 +248,7 @@ export class CenterlineEditor {
 		if (this.draggingIdx() !== null) return;
 		const src = this.lineIn();
 		const points = src.map(([x, y]) => ({ x: x * top.width, y: y * top.height }));
+		if (pointsEqual(points, this.pts())) return;
 		this.pts.set(points);
 		this.resetHistory(points);
 		if (points.length === 0) {
@@ -368,22 +385,33 @@ export class CenterlineEditor {
 		this.historyIndex.set(0);
 	}
 
-	private pushHistory() {
-		const snapshot = clonePts(this.pts());
-		const idx = this.historyIndex();
+	private beginHistoryChange() {
 		const history = this.history();
-		const trimmed = idx >= 0 ? history.slice(0, idx + 1) : [];
-		this.history.set([...trimmed, snapshot]);
-		this.historyIndex.set(trimmed.length);
+		if (history.length === 0) {
+			this.resetHistory(this.pts());
+			return;
+		}
+		const idx = Math.max(0, this.historyIndex());
+		const trimmed = history.slice(0, idx + 1);
+		this.history.set(trimmed);
+		this.historyIndex.set(trimmed.length - 1);
 	}
 
-	private saveCurrentToHistory() {
+	private commitHistoryState() {
 		const snapshot = clonePts(this.pts());
-		const idx = this.historyIndex();
 		const history = this.history();
-		const current = idx >= 0 ? history[idx] : null;
-		if (current && pointsEqual(current, snapshot)) return;
-		const trimmed = idx >= 0 ? history.slice(0, idx + 1) : [];
+		if (history.length === 0) {
+			this.history.set([snapshot]);
+			this.historyIndex.set(0);
+			return;
+		}
+		const idx = Math.max(0, this.historyIndex());
+		const current = history[idx] ?? history[history.length - 1];
+		if (pointsEqual(current, snapshot)) {
+			this.historyIndex.set(idx);
+			return;
+		}
+		const trimmed = history.slice(0, idx + 1);
 		this.history.set([...trimmed, snapshot]);
 		this.historyIndex.set(trimmed.length);
 	}

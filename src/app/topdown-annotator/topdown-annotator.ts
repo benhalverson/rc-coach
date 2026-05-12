@@ -221,6 +221,12 @@ export class TopdownAnnotator {
 		this.drawMode.set(mode);
 	}
 
+	onSnapToggle(event: Event) {
+		const target = event.target;
+		if (!(target instanceof HTMLInputElement)) return;
+		this.snapEnabled.set(target.checked);
+	}
+
 	deleteSelected() {
 		const id = this.selectedZoneId();
 		if (!id) return;

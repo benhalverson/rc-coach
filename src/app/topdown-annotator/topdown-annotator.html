@@ -4,7 +4,7 @@
 		<div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
 			<span class="font-medium">Draw mode:</span>
 			<label class="inline-flex items-center gap-1 min-h-[44px] text-xs">
-				<input type="checkbox" [checked]="snapEnabled()" (change)="snapEnabled.set($any($event.target).checked)" />
+				<input type="checkbox" [checked]="snapEnabled()" (change)="onSnapToggle($event)" />
 				Snap points
 			</label>
 			<label class="inline-flex items-center gap-1 min-h-[44px]">
