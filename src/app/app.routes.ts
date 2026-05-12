@@ -7,6 +7,11 @@ export const routes: Routes = [
 			import('./track-editor/track-editor').then((m) => m.TrackEditor),
 	},
 	{
+		path: 'viewer',
+		loadComponent: () =>
+			import('./track-viewer/track-viewer').then((m) => m.TrackViewer),
+	},
+	{
 		path: 'coach',
 		loadComponent: () =>
 			import('./coach/coach-prototype').then((m) => m.CoachPrototype),

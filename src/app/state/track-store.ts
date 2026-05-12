@@ -499,11 +499,11 @@ export class TrackStore {
 	}
 
 	/**
-	 * Apply an imported session (PNG + JSON) to the editor state.
+	 * Apply an imported session (PNG + JSON) to the current app state.
 	 * Rehydrates name, dimensions, zones, centerline, and creates the `topDown` canvas.
 	 * Zones with fewer than 3 polygon points are silently discarded.
 	 */
-	applyImport() {
+	applyImport(nextStep: Step = 'annotate') {
 		const img = this.importTopdownImg();
 		const t = this.importTrack();
 		if (!img || !t) return;
@@ -549,7 +549,7 @@ export class TrackStore {
 		this.importJsonError.set(null);
 		this.importWarnings.set([]);
 		this.importPngError.set(null);
-		this.step.set('annotate');
+		this.step.set(nextStep);
 	}
 
 	/**

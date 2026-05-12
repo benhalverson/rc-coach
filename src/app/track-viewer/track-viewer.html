@@ -1,0 +1,184 @@
+<div class="mx-auto max-w-6xl space-y-4 p-4">
+  <div class="flex flex-wrap items-center gap-3">
+    <div class="space-y-1">
+      <h1 class="text-xl font-semibold">Local track viewer</h1>
+      <p class="text-sm text-neutral-400">
+        Load a validated <code>track.json</code> plus <code>topdown.png</code> to inspect exported geometry and replay-ready overlays.
+      </p>
+    </div>
+
+    <div class="ml-auto flex flex-wrap gap-2">
+      <a routerLink="/"
+        class="inline-flex min-h-[44px] items-center rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900">
+        Open editor
+      </a>
+      <button type="button"
+        class="min-h-[44px] rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+        (click)="resetViewer()">
+        Clear viewer
+      </button>
+    </div>
+  </div>
+
+  <section class="space-y-3 rounded-xl border border-neutral-800 p-4">
+    <div class="text-sm text-neutral-400">
+      This route stays local-file based for now. Select both files from an existing export to open the viewer.
+    </div>
+
+    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <label class="space-y-1">
+        <div class="text-sm text-neutral-500">Top-down image (PNG)</div>
+        <input type="file" accept="image/png" (change)="onImportTopdownFile($event)" />
+        @if (importPngError()) {
+          <div role="alert" class="text-xs text-red-400">{{ importPngError() }}</div>
+        }
+      </label>
+
+      <label class="space-y-1">
+        <div class="text-sm text-neutral-500">Track definition (JSON)</div>
+        <input type="file" accept="application/json" (change)="onImportTrackJsonFile($event)" />
+        @if (importJsonError()) {
+          <div role="alert" class="text-xs text-red-400">{{ importJsonError() }}</div>
+        }
+        @if (importWarnings().length) {
+          <div class="text-xs text-amber-300">{{ importWarnings().join(' ') }}</div>
+        }
+      </label>
+    </div>
+
+    @if (importCompatibilityError()) {
+      <div role="alert" class="text-xs text-red-400">{{ importCompatibilityError() }}</div>
+    }
+
+    @if (importTrack(); as track) {
+      <div class="text-sm text-neutral-400">
+        Loaded track:
+        <span class="text-neutral-100">{{ track.name }}</span>
+        • {{ track.topdownPx.w }}×{{ track.topdownPx.h }} px
+        • {{ track.zones.length }} zones
+        • {{ track.centerline?.length ?? 0 }} control points
+        @if (pixelsPerMeterAuto(); as ppm) {
+          <span>• ~{{ ppm.toFixed(1) }} px/m</span>
+        }
+      </div>
+    } @else {
+      <div class="text-sm text-neutral-500">Select both files above to enable import.</div>
+    }
+
+    <button type="button"
+      class="min-h-[44px] rounded-lg border border-cyan-700 px-3 py-2 text-cyan-200 hover:bg-cyan-950 disabled:cursor-not-allowed disabled:opacity-50"
+      [disabled]="!canImport()"
+      [title]="!canImport() ? 'Select both a topdown PNG and a track.json to continue' : ''"
+      (click)="applyImport()">
+      Open in viewer
+    </button>
+  </section>
+
+  @if (topDownDataUrl()) {
+    <section class="space-y-4 rounded-xl border border-neutral-800 p-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="space-y-1">
+          <h2 class="text-lg font-semibold">{{ name() }}</h2>
+          <div class="text-sm text-neutral-400">
+            {{ widthMeters().toFixed(2) }}m × {{ heightMeters().toFixed(2) }}m
+            • {{ zones().length }} zones
+            • {{ centerline().length }} centerline control points
+          </div>
+        </div>
+
+        <fieldset class="flex flex-wrap items-center gap-3 text-sm">
+          <legend class="sr-only">Viewer overlays</legend>
+
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [checked]="showZones()"
+              (change)="showZones.set($any($event.target).checked)" />
+            <span>Zones</span>
+          </label>
+
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [checked]="showRawCenterline()"
+              (change)="showRawCenterline.set($any($event.target).checked)" />
+            <span>Control points</span>
+          </label>
+
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [checked]="showDerivedCenterline()"
+              (change)="showDerivedCenterline.set($any($event.target).checked)" />
+            <span>Derived centerline</span>
+          </label>
+
+          <label class="inline-flex items-center gap-2">
+            <span>Overlay opacity</span>
+            <input type="range" min="0" max="100" step="5" [value]="overlayOpacity()"
+              (input)="overlayOpacity.set(+$any($event.target).value)" />
+          </label>
+        </fieldset>
+      </div>
+
+      <div class="relative overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900">
+        <img [src]="topDownDataUrl()!" alt="Imported top-down track view" class="block h-auto w-full" />
+
+        <svg class="pointer-events-none absolute inset-0" viewBox="0 0 100 100" preserveAspectRatio="none"
+          [style.opacity]="overlayOpacity() / 100" aria-hidden="true">
+          @if (showZones()) {
+            @for (zone of zoneOverlays(); track zone.id) {
+              <polygon [attr.points]="zone.points" [attr.stroke]="zone.stroke" [attr.fill]="zone.fill" stroke-width="0.35" />
+            }
+          }
+
+          @if (showRawCenterline() && centerline().length) {
+            <polyline [attr.points]="rawCenterlinePointsSvg()" fill="none" stroke="#ffffff" stroke-width="0.25"
+              stroke-dasharray="1.2 1.2" />
+            @for (point of centerlinePoints(); track point.id) {
+              <circle [attr.cx]="point.cx" [attr.cy]="point.cy" r="0.9" fill="#ffffff" />
+            }
+          }
+
+          @if (showDerivedCenterline() && derivedCenterlinePointsSvg()) {
+            <polyline [attr.points]="derivedCenterlinePointsSvg()" fill="none" stroke="#22d3ee" stroke-width="0.55"
+              stroke-linecap="round" stroke-linejoin="round" />
+          }
+        </svg>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-3">
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-sm text-neutral-300">
+          <div class="font-medium text-neutral-100">Imported export</div>
+          <div class="mt-2 text-neutral-400">
+            The viewer renders the exported PNG, validated zones, and the derived centerline from the saved control points.
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-sm text-neutral-300">
+          <div class="font-medium text-neutral-100">Replay foundation</div>
+          <div class="mt-2 text-neutral-400">
+            Use the controls below to inspect centerline-following behavior without changing editor workflows.
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-sm text-neutral-300">
+          <div class="font-medium text-neutral-100">Track payload</div>
+          <div class="mt-2 text-neutral-400">
+            Schema v{{ trackDef()?.schemaVersion ?? 1 }}
+            • {{ trackDef()?.topdownPx?.w ?? 0 }}×{{ trackDef()?.topdownPx?.h ?? 0 }} px
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="space-y-3 rounded-xl border border-neutral-800 p-4">
+      <div class="space-y-1">
+        <h2 class="text-lg font-semibold">Replay prototype</h2>
+        <p class="text-sm text-neutral-400">
+          This existing centerline follower stays read-only with respect to the imported export and gives the viewer replay-ready inspection controls.
+        </p>
+      </div>
+
+      <app-centerline-demo></app-centerline-demo>
+    </section>
+  } @else {
+    <section class="rounded-xl border border-dashed border-neutral-800 p-6 text-sm text-neutral-500">
+      Import a validated export above to render the top-down image, zones, and centerline overlays.
+    </section>
+  }
+</div>
