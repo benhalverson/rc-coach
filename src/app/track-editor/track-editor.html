@@ -1,28 +1,46 @@
 <div class="mx-auto max-w-5xl p-4 space-y-4">
-  <div class="flex items-center gap-3">
+  <div class="flex flex-wrap items-center gap-3">
     <h1 class="text-xl font-semibold">Track Editor</h1>
-    <div class="text-sm text-neutral-500">Step: {{ step() }}</div>
     <div class="ml-auto flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900" (click)="resetAll()">Reset
-        all</button>
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]" (click)="resetAll()">Reset all</button>
     </div>
   </div>
 
+  <!-- Step progress indicator -->
+  <nav aria-label="Editor steps" class="flex items-center gap-1 text-xs flex-wrap">
+    @for (s of STEPS; track s.id) {
+      <span class="px-2 py-1 rounded font-medium transition-colors"
+        [class.bg-cyan-700]="step() === s.id"
+        [class.text-white]="step() === s.id"
+        [class.text-neutral-500]="step() !== s.id"
+        [attr.aria-current]="step() === s.id ? 'step' : null">{{ s.label }}</span>
+      @if (!$last) {
+        <span class="text-neutral-600 select-none" aria-hidden="true">›</span>
+      }
+    }
+  </nav>
+
   <!-- UPLOAD -->
   <section *ngIf="step()==='upload'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
-    <div class="text-neutral-500">Upload your track screenshot.</div>
+    <div class="text-neutral-400">Upload a screenshot of your RC track. We'll use it to build a top-down view.</div>
     <input type="file" accept="image/*" (change)="onFile($event)" />
 
     <div class="mt-4 rounded-xl border border-neutral-800 p-3 space-y-2">
-      <div class="text-neutral-400 text-sm">Or import an existing session (topdown.png + track.json)</div>
+      <div class="text-neutral-400 text-sm font-medium">Or import an existing session (topdown.png + track.json)</div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
         <label class="space-y-1">
           <div class="text-xs text-neutral-500">Top-down image (PNG)</div>
           <input type="file" accept="image/png" (change)="onImportTopdownFile($event)" />
+          @if (importPngError()) {
+            <div role="alert" class="text-xs text-red-400">{{ importPngError() }}</div>
+          }
         </label>
         <label class="space-y-1">
           <div class="text-xs text-neutral-500">Track definition (JSON)</div>
           <input type="file" accept="application/json" (change)="onImportTrackJsonFile($event)" />
+          @if (importJsonError()) {
+            <div role="alert" class="text-xs text-red-400">{{ importJsonError() }}</div>
+          }
         </label>
       </div>
 
@@ -33,9 +51,15 @@
         <span *ngIf="pixelsPerMeterAuto() as ppm">• ~{{ ppm.toFixed(1) }} px/m</span>
       </div>
 
+      <div class="text-xs text-neutral-500" *ngIf="!importTrack() && !importTopdownImg()">
+        Select both files above to enable import.
+      </div>
+
       <button type="button"
-        class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 disabled:opacity-50"
-        [disabled]="!canImport()" (click)="applyImport()">
+        class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+        [disabled]="!canImport()"
+        [title]="!canImport() ? 'Select both a topdown PNG and a track.json to import' : ''"
+        (click)="applyImport()">
         Import session
       </button>
     </div>
@@ -43,10 +67,17 @@
 
   <!-- QUAD PICK -->
   <section *ngIf="step()==='quad'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
-    <div class="text-neutral-500">
-      Click 4 points for the floor plane: <span class="font-semibold">TL → TR → BR → BL</span>.
-      (You can drag to adjust.)
+    <div class="text-neutral-400">
+      Click the 4 corners of the track surface in order:
+      <span class="font-semibold text-neutral-200">Top-Left → Top-Right → Bottom-Right → Bottom-Left</span>.
+      Drag handles to fine-tune, then click <strong>Confirm quad</strong>.
     </div>
+
+    @if (!srcImage()) {
+      <div class="rounded-lg border border-neutral-700 bg-neutral-900 p-4 text-sm text-neutral-400">
+        No image loaded. Go back and upload a track screenshot.
+      </div>
+    }
 
     <!-- Replace with your modern quad picker -->
     <app-quad-picker *ngIf="srcImage()" [image]="srcImage()!" (quad)="onQuad($event)"></app-quad-picker>
@@ -58,15 +89,21 @@
       </div>
     }
 
-    <div class="flex gap-2 pt-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2 pt-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('upload')">Back</button>
     </div>
   </section>
 
   <!-- SCALE -->
   <section *ngIf="step()==='scale'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
-    <div class="text-neutral-500">Top-down created. Define real size (meters).</div>
+    <div class="text-neutral-400">Set the real-world size of your track. Use <strong class="text-neutral-200">Measure scale</strong> to calibrate from the image, or enter known dimensions.</div>
+
+    @if (quadError()) {
+      <div role="alert" class="rounded-lg border border-amber-600 bg-amber-950/40 p-3 text-sm text-amber-300">
+        <span class="font-semibold">⚠ Warp notice:</span> {{ quadError() }}
+      </div>
+    }
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
       <label class="space-y-1">
@@ -77,35 +114,49 @@
 
       <label class="space-y-1">
         <div class="text-sm text-neutral-500">Plane width (m)</div>
-        <input type="number" step="0.01"
+        <input type="number" step="0.01" min="0.01"
           class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-          [value]="widthMeters()" (input)="widthMeters.set($any($event.target).valueAsNumber || 0)" />
+          [value]="widthMeters()" (input)="widthMeters.set($any($event.target).valueAsNumber)" />
       </label>
 
       <label class="space-y-1">
         <div class="text-sm text-neutral-500">Plane height (m)</div>
-        <input type="number" step="0.01"
+        <input type="number" step="0.01" min="0.01"
           class="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-          [value]="heightMeters()" (input)="heightMeters.set($any($event.target).valueAsNumber || 0)" />
+          [value]="heightMeters()" (input)="heightMeters.set($any($event.target).valueAsNumber)" />
       </label>
     </div>
+
+    @if (scaleErrors().length) {
+    <div role="alert" aria-live="polite"
+      class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-neutral-100">
+      <div class="font-semibold mb-1 text-red-300">Fix these before continuing:</div>
+      <ul class="list-disc pl-5">
+        @for (err of scaleErrors(); track err) {
+          <li>{{ err }}</li>
+        }
+      </ul>
+    </div>
+    }
 
     <div class="rounded-xl border border-neutral-800 p-2 space-y-2">
       <div *ngIf="!measureMode()">
         <img *ngIf="topDownDataUrl() as td" [src]="td" alt="Top-down preview"
           class="w-full h-auto rounded-lg border border-neutral-800" />
-        <div *ngIf="!topDownDataUrl()" class="text-neutral-500">No topdown yet.</div>
+        <div *ngIf="!topDownDataUrl()" class="rounded-lg bg-neutral-900 p-4 text-sm text-neutral-500">
+          No top-down image yet. Go back and confirm your quad selection.
+        </div>
       </div>
 
       <div *ngIf="!measureMode() && topDownDataUrl()">
-        <button type="button" class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 w-full"
+        <button type="button" class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 w-full min-h-[44px]"
           (click)="measureMode.set(true)">
           Measure scale
         </button>
       </div>
 
       <div *ngIf="measureMode()" class="space-y-3">
-        <div class="text-sm text-neutral-300">Click two points on the image to measure distance.</div>
+        <div class="text-sm text-neutral-300">Click two points on the image to measure a known distance.</div>
         <img *ngIf="topDownDataUrl() as td" [src]="td" alt="Top-down for measurement"
           (click)="onMeasureCanvasClick($event, $any($event.target))"
           class="w-full h-auto cursor-crosshair rounded-lg border border-neutral-800" />
@@ -114,8 +165,14 @@
           <div *ngIf="measurePt1()" class="text-xs text-neutral-400">
             Point 1: {{ measurePt1()!.x.toFixed(0) }}, {{ measurePt1()!.y.toFixed(0) }}
           </div>
+          <div *ngIf="!measurePt1()" class="text-xs text-neutral-500">
+            Click the image to set point 1.
+          </div>
           <div *ngIf="measurePt2()" class="text-xs text-neutral-400">
             Point 2: {{ measurePt2()!.x.toFixed(0) }}, {{ measurePt2()!.y.toFixed(0) }}
+          </div>
+          <div *ngIf="measurePt1() && !measurePt2()" class="text-xs text-neutral-500">
+            Click again to set point 2.
           </div>
           <div *ngIf="measurePixelDist() as dist" class="text-xs text-neutral-400">
             Pixel distance: {{ dist.toFixed(1) }}px
@@ -132,13 +189,15 @@
             Calculated: {{ ppm.toFixed(2) }} px/m
           </div>
 
-          <div class="flex gap-2 pt-2">
-            <button type="button" class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+          <div class="flex flex-wrap gap-2 pt-2">
+            <button type="button" class="rounded border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-800 min-h-[44px]"
               (click)="cancelMeasure()">
               Cancel
             </button>
-            <button type="button" class="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800 disabled:opacity-50"
-              [disabled]="!pixelsPerMeter()" (click)="applyMeasure()">
+            <button type="button" class="rounded border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+              [disabled]="!pixelsPerMeter()"
+              [title]="!pixelsPerMeter() ? 'Set both points and enter a real distance first' : ''"
+              (click)="applyMeasure()">
               Apply scale
             </button>
           </div>
@@ -146,18 +205,24 @@
       </div>
     </div>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('quad')">Back</button>
 
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50"
-        [disabled]="!canGoAnnotate()" (click)="step.set('annotate')">Next: annotate</button>
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+        [disabled]="!canGoAnnotate()"
+        [title]="canGoAnnotateHint() ?? ''"
+        (click)="step.set('annotate')">Next: annotate</button>
+
+      @if (!canGoAnnotate() && canGoAnnotateHint()) {
+        <span class="self-center text-xs text-amber-400">{{ canGoAnnotateHint() }}</span>
+      }
     </div>
   </section>
 
   <!-- ANNOTATE -->
   <section *ngIf="step()==='annotate'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
-    <div class="text-neutral-500">Draw zones: jumps and wall rides.</div>
+    <div class="text-neutral-400">Draw zones on the track map. At least one zone is required to export.</div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <!-- Zones summary panel -->
@@ -169,7 +234,7 @@
           </div>
 
           @if (zones().length === 0) {
-            <p class="text-xs text-neutral-500">No zones yet. Draw some on the canvas.</p>
+            <p class="text-xs text-neutral-500">No zones yet. Select a zone type in the canvas toolbar and draw a polygon.</p>
           } @else {
             <div class="space-y-2 max-h-96 overflow-y-auto">
               @for (zone of zones(); track zone.id) {
@@ -218,45 +283,55 @@
         <app-topdown-annotator *ngIf="topDown()" [topdown]="topDown()!" [zonesIn]="zones()"
           (zonesOut)="zones.set($event)" #annotator>
         </app-topdown-annotator>
+        @if (!topDown()) {
+          <div class="rounded-lg border border-neutral-700 bg-neutral-900 p-4 text-sm text-neutral-500">
+            No top-down image available. Go back to the Scale step.
+          </div>
+        }
       </div>
     </div>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('scale')">Back</button>
 
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('centerline')">Next: centerline</button>
     </div>
   </section>
 
   <!-- CENTERLINE -->
   <section *ngIf="step()==='centerline'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
-    <div class="text-neutral-500">Draw the racing line (centerline). Click to add points, drag to adjust.</div>
+    <div class="text-neutral-400">Trace the ideal racing line. Click to add points, drag to adjust, then proceed to export.</div>
 
     <div class="rounded-lg border border-neutral-800 bg-neutral-900 p-3 space-y-3">
-      <div class="flex items-center justify-between text-sm text-neutral-300">
+      <div class="flex flex-wrap items-center justify-between gap-y-1 text-sm text-neutral-300">
         <span>Points: {{ centerline().length }}</span>
-        <span>Use undo/clear to refine</span>
+        <span class="text-xs text-neutral-500">Use undo/clear to refine</span>
       </div>
 
       <app-centerline-editor *ngIf="topDown()" [topdown]="topDown()!" [lineIn]="centerline()"
         (lineOut)="onCenterlineChange($event)">
       </app-centerline-editor>
+      @if (!topDown()) {
+        <div class="rounded-lg border border-neutral-700 p-4 text-sm text-neutral-500">
+          No top-down image available. Go back to the Scale step.
+        </div>
+      }
     </div>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('annotate')">Back</button>
 
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('export')">Next: export</button>
     </div>
   </section>
 
   <!-- EXPORT -->
   <section *ngIf="step()==='export'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
-    <div class="text-neutral-500">Export your track definition.</div>
+    <div class="text-neutral-400">Export your track definition. Resolve any errors below before downloading.</div>
 
     <div *ngIf="exportErrors().length" role="alert" aria-live="polite"
       class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-neutral-100">
@@ -267,31 +342,35 @@
     </div>
 
     <div class="flex flex-wrap gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="downloadTopdownPng()">Download topdown.png</button>
 
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50"
-        [disabled]="!exportValid()" (click)="downloadTrackJson()">Download track.json</button>
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+        [disabled]="!exportValid()"
+        [title]="!exportValid() ? 'Resolve all errors above to enable download' : ''"
+        (click)="downloadTrackJson()">Download track.json</button>
 
-      <button class="rounded-lg border border-cyan-700 px-3 py-2 text-cyan-200 hover:bg-cyan-950 disabled:opacity-50"
-        [disabled]="!exportValid()" (click)="step.set('viewer')">Open viewer (no reupload)</button>
+      <button class="rounded-lg border border-cyan-700 px-3 py-2 text-cyan-200 hover:bg-cyan-950 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+        [disabled]="!exportValid()"
+        [title]="!exportValid() ? 'Resolve all errors above to open the viewer' : ''"
+        (click)="step.set('viewer')">Open viewer (no reupload)</button>
     </div>
 
     <pre class="overflow-auto rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300"
       *ngIf="trackDef() as t">{{ t | json }}</pre>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('annotate')">Back</button>
     </div>
   </section>
 
   <!-- VIEWER (no reupload) -->
   <section *ngIf="step()==='viewer'" class="space-y-3 rounded-xl border border-neutral-800 p-4">
-    <div class="text-neutral-500">Session viewer: using current topdown + zones without reuploading.</div>
+    <div class="text-neutral-400">Preview your track with zones and racing line overlaid.</div>
 
     <div class="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-      <div class="mb-2 flex items-center justify-between text-sm text-neutral-300">
+      <div class="mb-2 flex flex-wrap items-center justify-between gap-y-1 text-sm text-neutral-300">
         <span>{{ name() }} — {{ widthMeters().toFixed(2) }}m x {{ heightMeters().toFixed(2) }}m</span>
         <span>Zones: {{ zones().length }} • Centerline pts: {{ centerline().length }}</span>
       </div>
@@ -316,10 +395,10 @@
     <!-- Centerline Follower Demo -->
     <app-centerline-demo></app-centerline-demo>
 
-    <div class="flex gap-2">
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+    <div class="flex flex-wrap gap-2">
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('export')">Back</button>
-      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900"
+      <button class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px]"
         (click)="step.set('annotate')">Edit zones</button>
     </div>
   </section>

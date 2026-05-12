@@ -17,7 +17,7 @@ export type TrackDef = {
 	zones: Zone[];
 	centerline?: Vec2[];
 	topdownPx: { w: number; h: number };
-	import: {
+	import?: {
 		srcImageName: string;
 		srcQuadPx: {
 			x: number;

@@ -1,10 +1,10 @@
 import { CommonModule, JsonPipe } from '@angular/common';
-import { Component, inject, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, viewChild } from '@angular/core';
 import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
 import { QuadPicker } from '../quad-picker/quad-picker';
-import { TrackStore } from '../state/track-store';
+import { TrackStore, type Step } from '../state/track-store';
 import { TopdownAnnotator } from '../topdown-annotator/topdown-annotator';
 import type { Vec2, ZoneType } from '../track-types';
 
@@ -20,10 +20,20 @@ import type { Vec2, ZoneType } from '../track-types';
 	],
 	templateUrl: './track-editor.html',
 	styleUrl: './track-editor.css',
+	changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TrackEditor {
 	private readonly annotator = viewChild<TopdownAnnotator>('annotator');
 	private readonly store = inject(TrackStore);
+
+	readonly STEPS: { id: Step; label: string }[] = [
+		{ id: 'upload', label: '1. Upload' },
+		{ id: 'quad', label: '2. Quad' },
+		{ id: 'scale', label: '3. Scale' },
+		{ id: 'annotate', label: '4. Annotate' },
+		{ id: 'centerline', label: '5. Centerline' },
+		{ id: 'export', label: '6. Export' },
+	];
 
 	// Proxies to TrackStore signals/computed
 	readonly step = this.store.step;
@@ -48,6 +58,9 @@ export class TrackEditor {
 	readonly measureRealDist = this.store.measureRealDist;
 	readonly pixelsPerMeter = this.store.pixelsPerMeter;
 	readonly canGoAnnotate = this.store.canGoAnnotate;
+	readonly canGoAnnotateHint = this.store.canGoAnnotateHint;
+	readonly scaleErrors = this.store.scaleErrors;
+	readonly scaleValid = this.store.scaleValid;
 	readonly trackDef = this.store.trackDef;
 	readonly exportErrors = this.store.exportErrors;
 	readonly exportValid = this.store.exportValid;
@@ -57,6 +70,8 @@ export class TrackEditor {
 	readonly importTrack = this.store.importTrack;
 	readonly canImport = this.store.canImport;
 	readonly pixelsPerMeterAuto = this.store.pixelsPerMeterAuto;
+	readonly importJsonError = this.store.importJsonError;
+	readonly importPngError = this.store.importPngError;
 
 	onFile(ev: Event) {
 		this.store.onFile(ev);
