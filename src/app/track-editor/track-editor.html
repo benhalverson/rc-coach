@@ -31,18 +31,18 @@
         <label class="space-y-1">
           <div class="text-xs text-neutral-500">Top-down image (PNG)</div>
           <input type="file" accept="image/png" (change)="onImportTopdownFile($event)" />
+          @if (importPngError()) {
+            <div role="alert" class="text-xs text-red-400">{{ importPngError() }}</div>
+          }
         </label>
         <label class="space-y-1">
           <div class="text-xs text-neutral-500">Track definition (JSON)</div>
           <input type="file" accept="application/json" (change)="onImportTrackJsonFile($event)" />
+          @if (importJsonError()) {
+            <div role="alert" class="text-xs text-red-400">{{ importJsonError() }}</div>
+          }
         </label>
       </div>
-
-      @if (importError()) {
-        <div role="alert" class="rounded-lg border border-red-700 bg-red-950/40 p-2 text-xs text-red-300">
-          {{ importError() }}
-        </div>
-      }
 
       <div class="text-xs text-neutral-400" *ngIf="importTrack() as t">
         Loaded track: <span class="text-neutral-200">{{ t.name }}</span>

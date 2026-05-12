@@ -68,9 +68,10 @@ export class TrackEditor {
 	// Import proxies
 	readonly importTopdownImg = this.store.importTopdownImg;
 	readonly importTrack = this.store.importTrack;
-	readonly importError = this.store.importError;
 	readonly canImport = this.store.canImport;
 	readonly pixelsPerMeterAuto = this.store.pixelsPerMeterAuto;
+	readonly importJsonError = this.store.importJsonError;
+	readonly importPngError = this.store.importPngError;
 
 	onFile(ev: Event) {
 		this.store.onFile(ev);
