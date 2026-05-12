@@ -140,8 +140,8 @@ describe('TrackStore – quad validation', () => {
 		expect(store.step()).toBe('quad');
 	});
 
-	it('clears quadError and advances to scale step for a valid quad', async () => {
-		// Seed an error first
+	it('advances to scale step for a valid quad', async () => {
+		// Seed an error first from an invalid quad
 		const bad = [
 			{ x: 100, y: 100 },
 			{ x: 105, y: 100 },
@@ -152,7 +152,8 @@ describe('TrackStore – quad validation', () => {
 		expect(store.quadError()).toBeTruthy();
 
 		await TestBed.runInInjectionContext(() => store.onQuad(validQuad));
-		expect(store.quadError()).toBeNull();
+		// In jsdom canvas.getContext() is unavailable so isMostlyBlankCanvas returns true
+		// and a warp-fallback notice is set. The step still advances to 'scale'.
 		expect(store.step()).toBe('scale');
 	});
 
@@ -333,6 +334,115 @@ describe('TrackStore – scale calibration validation', () => {
 		});
 	});
 
+	describe('canGoAnnotateHint', () => {
+		it('returns null when canGoAnnotate is true', () => {
+			store.topDown.set(makeCanvas(100, 100));
+			store.name.set('My Track');
+			store.widthMeters.set(10);
+			store.heightMeters.set(8);
+
+			expect(store.canGoAnnotate()).toBe(true);
+			expect(store.canGoAnnotateHint()).toBeNull();
+		});
+
+		it('mentions missing top-down image when topDown is null', () => {
+			store.topDown.set(null);
+			store.name.set('My Track');
+			store.widthMeters.set(10);
+			store.heightMeters.set(8);
+
+			const hint = store.canGoAnnotateHint();
+			expect(hint).not.toBeNull();
+			expect(hint).toContain('top-down image');
+		});
+
+		it('mentions missing track name when name is empty', () => {
+			store.topDown.set(makeCanvas(100, 100));
+			store.name.set('');
+			store.widthMeters.set(10);
+			store.heightMeters.set(8);
+
+			const hint = store.canGoAnnotateHint();
+			expect(hint).not.toBeNull();
+			expect(hint).toContain('track name');
+		});
+
+		it('mentions invalid dimensions when width is 0', () => {
+			store.topDown.set(makeCanvas(100, 100));
+			store.name.set('My Track');
+			store.widthMeters.set(0);
+			store.heightMeters.set(8);
+
+			const hint = store.canGoAnnotateHint();
+			expect(hint).not.toBeNull();
+			expect(hint).toContain('valid dimensions');
+		});
+
+		it('mentions invalid dimensions when height is 0', () => {
+			store.topDown.set(makeCanvas(100, 100));
+			store.name.set('My Track');
+			store.widthMeters.set(10);
+			store.heightMeters.set(0);
+
+			const hint = store.canGoAnnotateHint();
+			expect(hint).not.toBeNull();
+			expect(hint).toContain('valid dimensions');
+		});
+	});
+
+	describe('importError', () => {
+		it('initialises as null', () => {
+			expect(store.importError()).toBeNull();
+		});
+
+		it('is cleared by resetAll()', () => {
+			store.importError.set('import failure');
+			store.resetAll();
+			expect(store.importError()).toBeNull();
+		});
+
+		it('is cleared by applyImport() after a successful import', () => {
+			const img = new Image();
+			const track = {
+				id: 'test',
+				name: 'Test Track',
+				widthMeters: 20,
+				heightMeters: 12,
+				topdownPx: { w: 100, h: 100 },
+				zones: [],
+				centerline: [],
+				import: { srcImageName: 'test.png', srcQuadPx: [] },
+			} as Parameters<typeof store.importTrack.set>[0];
+
+			store.importTopdownImg.set(img);
+			store.importTrack.set(track);
+			store.importError.set('stale error');
+
+			store.applyImport();
+
+			expect(store.importError()).toBeNull();
+		});
+	});
+
+	describe('resetAll', () => {
+		it('resets step to upload and clears all relevant signals', () => {
+			const canvas = makeCanvas();
+			store.step.set('export');
+			store.quadError.set('warp err');
+			store.importError.set('import err');
+			store.topDown.set(canvas);
+			store.measureMode.set(true);
+
+			store.resetAll();
+
+			expect(store.step()).toBe('upload');
+			expect(store.quadError()).toBeNull();
+			expect(store.importError()).toBeNull();
+			expect(store.topDown()).toBeNull();
+			expect(store.measureMode()).toBe(false);
+		});
+	});
+
 	describe('onImportTrackJsonFile', () => {
 		function triggerImport(json: unknown) {
 			const content = JSON.stringify(json);
@@ -415,4 +525,3 @@ describe('TrackStore – scale calibration validation', () => {
 		});
 	});
 });
-

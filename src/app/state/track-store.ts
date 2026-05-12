@@ -1,5 +1,5 @@
 import { computed, effect, Injectable, inject, signal } from '@angular/core';
-import { orderQuadTLTRBRBL, orderQuadTLTRBRBLv2, validateQuadTLTRBRBL, type Pt } from '../geometry/geometry';
+import { orderQuadTLTRBRBLv2, validateQuadTLTRBRBL, type Pt } from '../geometry/geometry';
 import { Opencv } from '../opencv';
 import type { TrackDef, Vec2, Zone } from '../track-types';
 import { getTrackExportErrors } from './track-validation';
@@ -91,6 +91,15 @@ export class TrackStore {
 			this.name().trim().length > 0,
 	);
 
+	readonly canGoAnnotateHint = computed<string | null>(() => {
+		if (this.canGoAnnotate()) return null;
+		const missing: string[] = [];
+		if (!this.topDown()) missing.push('top-down image');
+		if (!this.name().trim()) missing.push('track name');
+		if (!this.scaleValid()) missing.push('valid dimensions');
+		return missing.length ? `Missing: ${missing.join(', ')}.` : null;
+	});
+
 	readonly scaleErrors = computed(() => {
 		const errors: string[] = [];
 		const w = this.widthMeters();
@@ -175,7 +184,6 @@ export class TrackStore {
 		const img = this.srcImage();
 		if (!img) return;
 
-		// const ordered = orderQuadTLTRBRBL(rawPts);
 		const orderedv2 = orderQuadTLTRBRBLv2(rawPts);
 
 		const w = img.naturalWidth || img.width;
@@ -195,16 +203,25 @@ export class TrackStore {
 		const outH = this.topDownH();
 
 		let canvas: HTMLCanvasElement;
+		let warpFailed = false;
 		try {
 			canvas = this.cv.warpPerspective(img, orderedv2, outW, outH);
 		} catch (err) {
 			console.error('warpPerspective failed', err);
 			canvas = this.fallbackDraw(img, outW, outH);
+			warpFailed = true;
 		}
 
 		const blankAfterWarp = this.isMostlyBlankCanvas(canvas);
 		if (blankAfterWarp) {
 			canvas = this.fallbackDraw(img, outW, outH);
+			this.quadError.set(
+				'Warp produced a blank result — using a scaled fallback. Try moving the corner handles further apart.',
+			);
+		} else if (warpFailed) {
+			this.quadError.set(
+				'Perspective warp failed — using a scaled fallback. Check that all four corners are placed correctly.',
+			);
 		}
 
 		this.topDown.set(canvas);
@@ -226,6 +243,7 @@ export class TrackStore {
 		this.measurePt1.set(null);
 		this.measurePt2.set(null);
 		this.measureRealDist.set(0);
+		this.importError.set(null);
 	}
 
 	/**
@@ -332,6 +350,7 @@ export class TrackStore {
 	// Import session support
 	readonly importTopdownImg = signal<HTMLImageElement | null>(null);
 	readonly importTrack = signal<TrackDef | null>(null);
+	readonly importError = signal<string | null>(null);
 	readonly canImport = computed(
 		() => !!this.importTopdownImg() && !!this.importTrack(),
 	);
@@ -381,7 +400,7 @@ export class TrackStore {
 					!isValidDimension(json.widthMeters) ||
 					!isValidDimension(json.heightMeters)
 				) {
-					console.warn('Invalid track.json');
+					this.importError.set('Invalid track.json: missing required fields (topdownPx, widthMeters, heightMeters).');
 					return;
 				}
 				// Discard zones that are structurally invalid (< 3 points)
@@ -394,8 +413,10 @@ export class TrackStore {
 					json.zones = [];
 				}
 				this.importTrack.set(json);
+				this.importError.set(null);
 			} catch (e) {
 				console.error('Failed to parse track.json', e);
+				this.importError.set('Failed to parse track.json — make sure it is a valid exported file.');
 			}
 		};
 		reader.readAsText(file);
@@ -434,6 +455,7 @@ export class TrackStore {
 
 		this.importTopdownImg.set(null);
 		this.importTrack.set(null);
+		this.importError.set(null);
 		this.step.set('annotate');
 	}
 
