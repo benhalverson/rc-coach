@@ -3,13 +3,19 @@ import {
 	ChangeDetectionStrategy,
 	Component,
 	inject,
+	signal,
 	viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
 import { QuadPicker } from '../quad-picker/quad-picker';
+import {
+	TrackApiClient,
+	type TrackApiError,
+} from '../state/track-api-client';
 import { type Step, TrackStore } from '../state/track-store';
 import { TopdownAnnotator } from '../topdown-annotator/topdown-annotator';
 import type { Vec2, ZoneType } from '../track-types';
@@ -31,6 +37,7 @@ import type { Vec2, ZoneType } from '../track-types';
 })
 export class TrackEditor {
 	private readonly annotator = viewChild<TopdownAnnotator>('annotator');
+	private readonly trackApi = inject(TrackApiClient);
 	private readonly store = inject(TrackStore);
 
 	readonly STEPS: { id: Step; label: string }[] = [
@@ -75,6 +82,9 @@ export class TrackEditor {
 	readonly exportErrors = this.store.exportErrors;
 	readonly exportWarnings = this.store.exportWarnings;
 	readonly exportValid = this.store.exportValid;
+	readonly saveInFlight = signal(false);
+	readonly saveError = signal<string | null>(null);
+	readonly saveSuccess = signal<{ id: string; name: string } | null>(null);
 
 	// Import proxies
 	readonly importTopdownImg = this.store.importTopdownImg;
@@ -120,6 +130,38 @@ export class TrackEditor {
 		this.store.downloadTrackJson();
 	}
 
+	saveToCloud() {
+		if (this.saveInFlight()) return;
+
+		this.saveError.set(null);
+		this.saveSuccess.set(null);
+
+		const track = this.trackDef();
+		if (!this.exportValid() || !track) {
+			this.saveError.set('Resolve all export errors before saving to cloud.');
+			return;
+		}
+
+		const topdownPngBase64 = this.getTopdownPngBase64();
+		if (!topdownPngBase64) {
+			this.saveError.set('Top-down PNG is not available for upload.');
+			return;
+		}
+
+		this.saveInFlight.set(true);
+		this.trackApi
+			.saveTrack(track, topdownPngBase64)
+			.pipe(finalize(() => this.saveInFlight.set(false)))
+			.subscribe({
+				next: (response) => {
+					this.saveSuccess.set({ id: response.id, name: track.name });
+				},
+				error: (error: TrackApiError) => {
+					this.saveError.set(error.message);
+				},
+			});
+	}
+
 	selectZone(id: string) {
 		const ann = this.annotator();
 		if (ann) {
@@ -150,5 +192,17 @@ export class TrackEditor {
 	applyImport() {
 		this.store.applyImport();
 	}
+
+	private getTopdownPngBase64(): string | null {
+		const dataUrl =
+			this.topDownDataUrl() ?? this.topDown()?.toDataURL('image/png') ?? null;
+
+		return dataUrl ? extractPngBase64(dataUrl) : null;
+	}
 }
 // Using store-provided signals; no local Step type needed.
+
+function extractPngBase64(dataUrl: string): string | null {
+	const prefix = 'data:image/png;base64,';
+	return dataUrl.startsWith(prefix) ? dataUrl.slice(prefix.length) : null;
+}
