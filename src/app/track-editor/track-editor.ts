@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { finalize } from 'rxjs';
+import { finalize, forkJoin, switchMap } from 'rxjs';
 import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
@@ -239,37 +239,45 @@ export class TrackEditor {
 		this.openingTrackId.set(id);
 		this.trackLibraryError.set(null);
 
-		this.trackApiClient
-			.getTrack(id)
-			.pipe(takeUntilDestroyed(this.destroyRef))
+		forkJoin({
+			trackResponse: this.trackApiClient.getTrack(id),
+			imageBlob: this.trackApiClient.getTrackImage(id),
+		})
+			.pipe(
+				takeUntilDestroyed(this.destroyRef),
+				switchMap(async ({ trackResponse, imageBlob }) => ({
+					image: await this.loadImageBlob(imageBlob),
+					track: trackResponse.track,
+				})),
+				finalize(() => this.openingTrackId.set(null)),
+			)
 			.subscribe({
-				next: async (response) => {
-					try {
-						const image = await this.loadImage(
-							this.trackApiClient.getTrackImageUrl(response.track.id),
-						);
-						this.importTrack.set(response.track);
-						this.importTopdownImg.set(image);
-						this.applyImport();
-					} catch (error) {
-						this.trackLibraryError.set(this.getTrackApiErrorMessage(error));
-					} finally {
-						this.openingTrackId.set(null);
-					}
+				next: ({ track, image }) => {
+					this.importJsonError.set(null);
+					this.importWarnings.set([]);
+					this.importPngError.set(null);
+					this.importTrack.set(track);
+					this.importTopdownImg.set(image);
+					this.applyImport();
 				},
-				error: (error: TrackApiError) => {
+				error: (error: unknown) => {
 					this.trackLibraryError.set(this.getTrackApiErrorMessage(error));
-					this.openingTrackId.set(null);
 				},
 			});
 	}
 
-	private loadImage(url: string): Promise<HTMLImageElement> {
+	private loadImageBlob(blob: Blob): Promise<HTMLImageElement> {
 		return new Promise((resolve, reject) => {
+			const url = URL.createObjectURL(blob);
 			const image = new Image();
-			image.onload = () => resolve(image);
-			image.onerror = () =>
+			image.onload = () => {
+				URL.revokeObjectURL(url);
+				resolve(image);
+			};
+			image.onerror = () => {
+				URL.revokeObjectURL(url);
 				reject(new Error('Failed to load the saved track image.'));
+			};
 			image.src = url;
 		});
 	}
