@@ -2,12 +2,14 @@ import { CommonModule, JsonPipe } from '@angular/common';
 import {
 	ChangeDetectionStrategy,
 	Component,
+	DestroyRef,
 	inject,
 	signal,
 	viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { forkJoin, from } from 'rxjs';
+import { finalize, forkJoin, switchMap } from 'rxjs';
 import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
@@ -38,7 +40,8 @@ import type { Vec2, ZoneType } from '../track-types';
 })
 export class TrackEditor {
 	private readonly annotator = viewChild<TopdownAnnotator>('annotator');
-	private readonly trackApi = inject(TrackApiClient);
+	private readonly destroyRef = inject(DestroyRef);
+	private readonly trackApiClient = inject(TrackApiClient);
 	private readonly store = inject(TrackStore);
 
 	readonly STEPS: { id: Step; label: string }[] = [
@@ -83,6 +86,9 @@ export class TrackEditor {
 	readonly exportErrors = this.store.exportErrors;
 	readonly exportWarnings = this.store.exportWarnings;
 	readonly exportValid = this.store.exportValid;
+	readonly saveInFlight = signal(false);
+	readonly saveError = signal<string | null>(null);
+	readonly saveSuccess = signal<{ id: string; name: string } | null>(null);
 
 	// Import proxies
 	readonly importTopdownImg = this.store.importTopdownImg;
@@ -93,15 +99,11 @@ export class TrackEditor {
 	readonly importWarnings = this.store.importWarnings;
 	readonly importPngError = this.store.importPngError;
 	readonly importCompatibilityError = this.store.importCompatibilityError;
-	readonly cloudTracks = signal<TrackListItem[]>([]);
-	readonly cloudTracksLoading = signal(false);
-	readonly cloudTracksError = signal<string | null>(null);
-	readonly cloudTrackLoadingId = signal<string | null>(null);
-	readonly cloudTrackLoadError = signal<string | null>(null);
-
-	constructor() {
-		this.refreshCloudTracks();
-	}
+	readonly showTrackLibrary = signal(false);
+	readonly trackLibraryLoading = signal(false);
+	readonly trackLibraryItems = signal<TrackListItem[]>([]);
+	readonly trackLibraryError = signal<string | null>(null);
+	readonly openingTrackId = signal<string | null>(null);
 
 	onFile(ev: Event) {
 		this.store.onFile(ev);
@@ -137,6 +139,38 @@ export class TrackEditor {
 		this.store.downloadTrackJson();
 	}
 
+	saveToCloud() {
+		if (this.saveInFlight()) return;
+
+		this.saveError.set(null);
+		this.saveSuccess.set(null);
+
+		const track = this.trackDef();
+		if (!this.exportValid() || !track) {
+			this.saveError.set('Resolve all export errors before saving to cloud.');
+			return;
+		}
+
+		const topdownPngBase64 = this.getTopdownPngBase64();
+		if (!topdownPngBase64) {
+			this.saveError.set('Top-down PNG is not available for upload.');
+			return;
+		}
+
+		this.saveInFlight.set(true);
+		this.trackApiClient
+			.saveTrack(track, topdownPngBase64)
+			.pipe(finalize(() => this.saveInFlight.set(false)))
+			.subscribe({
+				next: (response) => {
+					this.saveSuccess.set({ id: response.id, name: track.name });
+				},
+				error: (error: TrackApiError) => {
+					this.saveError.set(error.message);
+				},
+			});
+	}
+
 	selectZone(id: string) {
 		const ann = this.annotator();
 		if (ann) {
@@ -168,50 +202,66 @@ export class TrackEditor {
 		this.store.applyImport();
 	}
 
-	refreshCloudTracks() {
-		this.cloudTracksLoading.set(true);
-		this.cloudTracksError.set(null);
-		this.trackApi.listTracks().subscribe({
-			next: (response) => {
-				this.cloudTracks.set(response.items);
-				this.cloudTracksLoading.set(false);
-			},
-			error: (error: TrackApiError) => {
-				this.cloudTracks.set([]);
-				this.cloudTracksError.set(error.message);
-				this.cloudTracksLoading.set(false);
-			},
-		});
+	toggleTrackLibrary() {
+		const next = !this.showTrackLibrary();
+		this.showTrackLibrary.set(next);
+		if (next) {
+			this.refreshTrackLibrary();
+		}
 	}
 
-	loadCloudTrack(id: string) {
-		this.cloudTrackLoadingId.set(id);
-		this.cloudTrackLoadError.set(null);
-		forkJoin({
-			trackResponse: this.trackApi.getTrack(id),
-			imageBlob: this.trackApi.getTrackImage(id),
-		})
+	refreshTrackLibrary() {
+		this.trackLibraryLoading.set(true);
+		this.trackLibraryError.set(null);
+
+		this.trackApiClient
+			.listTracks()
+			.pipe(
+				takeUntilDestroyed(this.destroyRef),
+				finalize(() => this.trackLibraryLoading.set(false)),
+			)
 			.subscribe({
-				next: ({ trackResponse, imageBlob }) => {
-					void from(this.loadImageBlob(imageBlob)).subscribe({
-						next: (img) => {
-							this.store.importJsonError.set(null);
-							this.store.importWarnings.set([]);
-							this.store.importPngError.set(null);
-							this.store.importTrack.set(trackResponse.track);
-							this.store.importTopdownImg.set(img);
-							this.store.applyImport();
-							this.cloudTrackLoadingId.set(null);
-						},
-						error: (error: Error) => {
-							this.cloudTrackLoadError.set(error.message);
-							this.cloudTrackLoadingId.set(null);
-						},
-					});
+				next: (response) => {
+					this.trackLibraryItems.set(response.items);
 				},
 				error: (error: TrackApiError) => {
-					this.cloudTrackLoadError.set(error.message);
-					this.cloudTrackLoadingId.set(null);
+					this.trackLibraryItems.set([]);
+					this.trackLibraryError.set(this.getTrackApiErrorMessage(error));
+				},
+			});
+	}
+
+	openSavedTrack(id: string) {
+		if (this.openingTrackId()) {
+			return;
+		}
+
+		this.openingTrackId.set(id);
+		this.trackLibraryError.set(null);
+
+		forkJoin({
+			trackResponse: this.trackApiClient.getTrack(id),
+			imageBlob: this.trackApiClient.getTrackImage(id),
+		})
+			.pipe(
+				takeUntilDestroyed(this.destroyRef),
+				switchMap(async ({ trackResponse, imageBlob }) => ({
+					image: await this.loadImageBlob(imageBlob),
+					track: trackResponse.track,
+				})),
+				finalize(() => this.openingTrackId.set(null)),
+			)
+			.subscribe({
+				next: ({ track, image }) => {
+					this.importJsonError.set(null);
+					this.importWarnings.set([]);
+					this.importPngError.set(null);
+					this.importTrack.set(track);
+					this.importTopdownImg.set(image);
+					this.applyImport();
+				},
+				error: (error: unknown) => {
+					this.trackLibraryError.set(this.getTrackApiErrorMessage(error));
 				},
 			});
 	}
@@ -219,21 +269,46 @@ export class TrackEditor {
 	private loadImageBlob(blob: Blob): Promise<HTMLImageElement> {
 		return new Promise((resolve, reject) => {
 			const url = URL.createObjectURL(blob);
-			const img = new Image();
-			img.onload = () => {
+			const image = new Image();
+			image.onload = () => {
 				URL.revokeObjectURL(url);
-				resolve(img);
+				resolve(image);
 			};
-			img.onerror = () => {
+			image.onerror = () => {
 				URL.revokeObjectURL(url);
-				reject(
-					new Error(
-						'Failed to load the saved top-down image. Please try again.',
-					),
-				);
+				reject(new Error('Failed to load the saved track image.'));
 			};
-			img.src = url;
+			image.src = url;
 		});
+	}
+
+	private getTrackApiErrorMessage(error: unknown): string {
+		if (hasErrorMessage(error)) {
+			return error.message;
+		}
+
+		return 'Unable to load saved tracks right now.';
+	}
+
+	private getTopdownPngBase64(): string | null {
+		const dataUrl =
+			this.topDownDataUrl() ?? this.topDown()?.toDataURL('image/png') ?? null;
+
+		return dataUrl ? extractPngBase64(dataUrl) : null;
 	}
 }
 // Using store-provided signals; no local Step type needed.
+
+function extractPngBase64(dataUrl: string): string | null {
+	const prefix = 'data:image/png;base64,';
+	return dataUrl.startsWith(prefix) ? dataUrl.slice(prefix.length) : null;
+}
+
+function hasErrorMessage(error: unknown): error is { message: string } {
+	return (
+		error !== null &&
+		typeof error === 'object' &&
+		'message' in error &&
+		typeof error.message === 'string'
+	);
+}
