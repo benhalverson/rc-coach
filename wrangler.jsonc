@@ -11,12 +11,15 @@
 		"binding": "ASSETS",
 		"directory": "./dist/browser"
 	},
+	"observability": {
+		"enabled": true
+	},
 	"d1_databases": [
 		{
 			"binding": "TRACKS_DB",
-			"database_name": "rc_coach_tracks",
-			// Replace with your real database ID from `wrangler d1 create rc_coach_tracks`.
-			"database_id": "REPLACE_WITH_D1_DATABASE_ID"
+			"database_name": "rc-coach-tracks",
+			"database_id": "81c31dd5-c411-45ed-a0b9-9845b711fa66",
+			"migrations_dir": "drizzle"
 		}
 	],
 	"r2_buckets": [
@@ -25,9 +28,6 @@
 			"bucket_name": "rc-coach-track-images"
 		}
 	],
-	"observability": {
-		"enabled": true
-	}
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

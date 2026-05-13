@@ -27,6 +27,9 @@ pnpm install --frozen-lockfile
 # Start local dev server (http://localhost:4200)
 pnpm start
 
+# In a second terminal, start the local Cloudflare Worker API runtime
+pnpm run dev:api
+
 # Build for production
 pnpm build
 
@@ -141,6 +144,40 @@ pnpm start
 - `pnpm test` succeeds with the current Angular/Vitest setup.
 - `pnpm build` succeeds and writes the SSR bundle to `dist/`.
 - `pnpm start` runs `ng serve` and starts the local dev server on port `4200`.
+
+### Local API development
+
+Run Angular and the Cloudflare Worker runtime in two terminals:
+
+```sh
+# Terminal 1: Angular dev server
+pnpm start
+
+# Terminal 2: local Worker runtime with D1 bindings
+pnpm run dev:api
+```
+
+`pnpm start` serves the app at `http://localhost:4200`. Angular's dev server proxies
+`/api/*` requests to Wrangler on `http://localhost:8787`, where the local D1 binding is
+available. After both processes are running, verify the API through the Angular dev URL:
+
+```sh
+curl http://localhost:4200/api/health
+```
+
+Expected response:
+
+```json
+{"ok":true}
+```
+
+`pnpm run dev:api` points Wrangler at a source-only Hono API entry, so Wrangler can
+watch and reload API changes during local development. Run local D1 migrations after
+changing migration files:
+
+```sh
+pnpm run db:migrate:local
+```
 
 ### Code formatting and linting
 

@@ -24,8 +24,8 @@ Table: `tracks`
 - `topdown_h_px INTEGER NOT NULL`
 - `image_key TEXT NOT NULL`
 - `track_json TEXT NOT NULL` (full validated `TrackDef` payload)
-- `created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP`
-- `updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP`
+- `created_at INTEGER NOT NULL` (Unix epoch milliseconds)
+- `updated_at INTEGER NOT NULL` (Unix epoch milliseconds)
 
 Index:
 
@@ -138,7 +138,7 @@ Error response shape:
 
 ```jsonc
 "d1_databases": [
-  { "binding": "TRACKS_DB", "database_name": "rc_coach_tracks", "database_id": "<id>" }
+  { "binding": "TRACKS_DB", "database_name": "rc-coach-tracks", "database_id": "<id>", "migrations_dir": "drizzle" }
 ],
 "r2_buckets": [
   { "binding": "TRACK_IMAGES", "bucket_name": "rc-coach-track-images" }

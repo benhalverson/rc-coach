@@ -1,154 +1,95 @@
-import type { TrackDef } from '../app/track-types';
+import { desc, eq } from 'drizzle-orm';
+import type { Context, Hono, MiddlewareHandler } from 'hono';
 import { validateTrackDef } from '../app/state/track-validation';
+import type { TrackDef } from '../app/track-types';
+import { requireDb, type ServerDb } from '../server.db';
+import type { R2Bucket, ServerEnv } from '../server.env';
+import { tracks } from '../server.schema';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+export const TRACK_LIBRARY_NOT_CONFIGURED_MESSAGE =
+	'Cloud track library is not configured. Missing TRACKS_DB or TRACK_IMAGES binding.';
 
-type D1Result<T> = { results: T[] };
-
-type D1PreparedStatement = {
-	bind(...values: unknown[]): {
-		all<T>(): Promise<D1Result<T>>;
-		first<T>(): Promise<T | null>;
-		run(): Promise<unknown>;
+export type TrackLibraryHonoEnv = {
+	Bindings: Partial<ServerEnv>;
+	Variables: {
+		db: ServerDb;
 	};
 };
 
-type D1Client = {
-	prepare(sql: string): D1PreparedStatement;
-	exec(sql: string): Promise<unknown>;
+type TrackLibraryContext = Context<TrackLibraryHonoEnv>;
+
+type RegisterTrackLibraryRoutesOptions = {
+	resolveDb?: (env: Partial<ServerEnv>) => ServerDb;
 };
 
-type R2ObjectBody = {
-	body: ReadableStream | null;
-	httpMetadata?: { contentType?: string };
-	writeHttpMetadata?(headers: Headers): void;
-	httpEtag?: string;
-};
-
-type R2Client = {
-	put(
-		key: string,
-		value: Uint8Array,
-		options?: {
-			httpMetadata?: { contentType?: string };
-		},
-	): Promise<unknown>;
-	get(key: string): Promise<R2ObjectBody | null>;
-};
-
-export type TrackLibraryEnv = {
-	TRACKS_DB?: D1Client;
-	TRACK_IMAGES?: R2Client;
-};
-
-type TrackRow = {
-	id: string;
-	name: string;
-	width_meters: number;
-	height_meters: number;
-	topdown_w_px: number;
-	topdown_h_px: number;
-	image_key: string;
-	track_json: string;
-	created_at: string;
-	updated_at: string;
-};
-
-export async function handleTrackLibraryRequest(
-	request: Request,
-	env?: TrackLibraryEnv,
-): Promise<Response | null> {
-	const url = new URL(request.url);
-	const { pathname } = url;
-	if (!pathname.startsWith('/api/tracks')) {
-		return null;
-	}
-
-	const db = env?.TRACKS_DB;
-	const images = env?.TRACK_IMAGES;
-	if (!db || !images) {
-		return jsonError(
-			503,
-			'Cloud track library is not configured. Missing TRACKS_DB or TRACK_IMAGES binding.',
-		);
-	}
-
-	await ensureSchema(db);
-
-	try {
-		if (pathname === '/api/tracks' && request.method === 'GET') {
-			return await listTracks(request, db);
-		}
-		if (pathname === '/api/tracks' && request.method === 'POST') {
-			return await saveTrack(request, db, images);
+export function registerTrackLibraryRoutes(
+	app: Hono<TrackLibraryHonoEnv>,
+	options: RegisterTrackLibraryRoutesOptions = {},
+) {
+	const resolveDb = options.resolveDb ?? requireDb;
+	const requireTrackLibraryBindings: MiddlewareHandler<
+		TrackLibraryHonoEnv
+	> = async (c, next) => {
+		if (!c.env.TRACK_IMAGES) {
+			return jsonError(c, 503, TRACK_LIBRARY_NOT_CONFIGURED_MESSAGE);
 		}
 
-		const trackIdMatch = pathname.match(/^\/api\/tracks\/([^/]+)$/);
-		if (trackIdMatch && request.method === 'GET') {
-			return await getTrack(trackIdMatch[1], db);
+		try {
+			c.set('db', resolveDb(c.env));
+		} catch {
+			return jsonError(c, 503, TRACK_LIBRARY_NOT_CONFIGURED_MESSAGE);
 		}
 
-		const trackImageMatch = pathname.match(/^\/api\/tracks\/([^/]+)\/topdown\.png$/);
-		if (trackImageMatch && request.method === 'GET') {
-			return await getTrackImage(trackImageMatch[1], db, images);
-		}
+		return next();
+	};
 
-		return jsonError(405, 'Method not allowed.');
-	} catch (error) {
-		const message = error instanceof Error ? error.message : 'Unknown error.';
-		return jsonError(500, `Failed to handle track library request: ${message}`);
-	}
+	app.use('/api/tracks', requireTrackLibraryBindings);
+	app.use('/api/tracks/*', requireTrackLibraryBindings);
+
+	app.get('/api/tracks', listTracks);
+	app.post('/api/tracks', saveTrack);
+	app.get('/api/tracks/:id/topdown.png', getTrackImage);
+	app.get('/api/tracks/:id', getTrack);
 }
 
-async function ensureSchema(db: D1Client): Promise<void> {
-	await db.exec(`
-CREATE TABLE IF NOT EXISTS tracks (
-	id TEXT PRIMARY KEY,
-	name TEXT NOT NULL,
-	width_meters REAL NOT NULL,
-	height_meters REAL NOT NULL,
-	topdown_w_px INTEGER NOT NULL,
-	topdown_h_px INTEGER NOT NULL,
-	image_key TEXT NOT NULL,
-	track_json TEXT NOT NULL,
-	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_tracks_updated_at ON tracks(updated_at DESC);
-`);
-}
-
-async function listTracks(request: Request, db: D1Client): Promise<Response> {
-	const url = new URL(request.url);
-	const page = readPositiveInt(url.searchParams.get('page')) ?? 1;
+async function listTracks(c: TrackLibraryContext): Promise<Response> {
+	const page = readPositiveInt(c.req.query('page') ?? null) ?? 1;
 	const pageSize = Math.min(
 		MAX_PAGE_SIZE,
-		readPositiveInt(url.searchParams.get('pageSize')) ?? DEFAULT_PAGE_SIZE,
+		readPositiveInt(c.req.query('pageSize') ?? null) ?? DEFAULT_PAGE_SIZE,
 	);
 	const offset = (page - 1) * pageSize;
 
-	const result = await db
-		.prepare(
-			`SELECT id, name, width_meters, height_meters, topdown_w_px, topdown_h_px, created_at, updated_at
-			 FROM tracks
-			 ORDER BY updated_at DESC
-			 LIMIT ? OFFSET ?`,
-		)
-		.bind(pageSize, offset)
-		.all<TrackRow>();
+	const rows = await c
+		.get('db')
+		.select({
+			id: tracks.id,
+			name: tracks.name,
+			widthMeters: tracks.widthMeters,
+			heightMeters: tracks.heightMeters,
+			topdownWPx: tracks.topdownWPx,
+			topdownHPx: tracks.topdownHPx,
+			createdAt: tracks.createdAt,
+			updatedAt: tracks.updatedAt,
+		})
+		.from(tracks)
+		.orderBy(desc(tracks.updatedAt))
+		.limit(pageSize)
+		.offset(offset);
 
-	return jsonResponse(200, {
-		items: result.results.map((row) => ({
+	return c.json({
+		items: rows.map((row) => ({
 			id: row.id,
 			name: row.name,
-			widthMeters: row.width_meters,
-			heightMeters: row.height_meters,
-			topdownPx: { w: row.topdown_w_px, h: row.topdown_h_px },
-			createdAt: row.created_at,
-			updatedAt: row.updated_at,
+			widthMeters: row.widthMeters,
+			heightMeters: row.heightMeters,
+			topdownPx: { w: row.topdownWPx, h: row.topdownHPx },
+			createdAt: row.createdAt.toISOString(),
+			updatedAt: row.updatedAt.toISOString(),
 			imageUrl: `/api/tracks/${encodeURIComponent(row.id)}/topdown.png`,
 		})),
 		page,
@@ -156,23 +97,20 @@ async function listTracks(request: Request, db: D1Client): Promise<Response> {
 	});
 }
 
-async function saveTrack(
-	request: Request,
-	db: D1Client,
-	images: R2Client,
-): Promise<Response> {
-	const body = await parseJsonBody(request);
+async function saveTrack(c: TrackLibraryContext): Promise<Response> {
+	const body = await parseJsonBody(c);
 	if (!body || !isRecord(body)) {
-		return jsonError(400, 'Body must be a JSON object.');
+		return jsonError(c, 400, 'Body must be a JSON object.');
 	}
 
 	const trackValidation = validateTrackDef(body['track']);
 	if (!trackValidation.ok) {
-		return jsonError(400, trackValidation.errors.join(' '));
+		return jsonError(c, 400, trackValidation.errors.join(' '));
 	}
 	const track = trackValidation.track;
 	if (!isSafeTrackId(track.id)) {
 		return jsonError(
+			c,
 			400,
 			'Track id must contain only letters, numbers, underscores, and hyphens.',
 		);
@@ -180,124 +118,141 @@ async function saveTrack(
 
 	const imageB64 = body['topdownPngBase64'];
 	if (typeof imageB64 !== 'string' || imageB64.trim().length === 0) {
-		return jsonError(400, 'topdownPngBase64 is required.');
+		return jsonError(c, 400, 'topdownPngBase64 is required.');
 	}
 
 	const imageBytes = decodeBase64(imageB64);
 	if (!imageBytes) {
-		return jsonError(400, 'topdownPngBase64 must be valid base64.');
+		return jsonError(c, 400, 'topdownPngBase64 must be valid base64.');
 	}
 	if (imageBytes.byteLength > MAX_IMAGE_BYTES) {
-		return jsonError(413, 'topdownPngBase64 exceeds max allowed size.');
+		return jsonError(c, 413, 'topdownPngBase64 exceeds max allowed size.');
 	}
 	const pngSize = readPngSize(imageBytes);
 	if (!pngSize) {
-		return jsonError(400, 'topdownPngBase64 must decode to a valid PNG image.');
+		return jsonError(
+			c,
+			400,
+			'topdownPngBase64 must decode to a valid PNG image.',
+		);
 	}
 	if (
 		pngSize.width !== track.topdownPx.w ||
 		pngSize.height !== track.topdownPx.h
 	) {
 		return jsonError(
+			c,
 			400,
 			`PNG dimensions (${pngSize.width}x${pngSize.height}) do not match track.topdownPx (${track.topdownPx.w}x${track.topdownPx.h}).`,
 		);
 	}
 
 	const imageKey = `tracks/${track.id}/topdown.png`;
-	await images.put(imageKey, imageBytes, {
+	await getImages(c).put(imageKey, imageBytes, {
 		httpMetadata: { contentType: 'image/png' },
 	});
 
-	const now = new Date().toISOString();
-	const existing = await db
-		.prepare(
-			`SELECT created_at
-			 FROM tracks
-			 WHERE id = ?`,
-		)
-		.bind(track.id)
-		.first<Pick<TrackRow, 'created_at'>>();
-	const createdAt = existing?.created_at ?? now;
+	const db = c.get('db');
+	const now = new Date();
+	const [existing] = await db
+		.select({ createdAt: tracks.createdAt })
+		.from(tracks)
+		.where(eq(tracks.id, track.id))
+		.limit(1);
+	const createdAt = existing?.createdAt ?? now;
+	const trackJson = JSON.stringify(track);
 
 	await db
-		.prepare(
-			`INSERT INTO tracks (
-				 id, name, width_meters, height_meters, topdown_w_px, topdown_h_px, image_key, track_json, created_at, updated_at
-			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			 ON CONFLICT(id) DO UPDATE SET
-				 name = excluded.name,
-				 width_meters = excluded.width_meters,
-				 height_meters = excluded.height_meters,
-				 topdown_w_px = excluded.topdown_w_px,
-				 topdown_h_px = excluded.topdown_h_px,
-				 image_key = excluded.image_key,
-				 track_json = excluded.track_json,
-				 updated_at = excluded.updated_at`,
-		)
-		.bind(
-			track.id,
-			track.name,
-			track.widthMeters,
-			track.heightMeters,
-			track.topdownPx.w,
-			track.topdownPx.h,
+		.insert(tracks)
+		.values({
+			id: track.id,
+			name: track.name,
+			widthMeters: track.widthMeters,
+			heightMeters: track.heightMeters,
+			topdownWPx: track.topdownPx.w,
+			topdownHPx: track.topdownPx.h,
 			imageKey,
-			JSON.stringify(track),
+			trackJson,
 			createdAt,
-			now,
-		)
-		.run();
+			updatedAt: now,
+		})
+		.onConflictDoUpdate({
+			target: tracks.id,
+			set: {
+				name: track.name,
+				widthMeters: track.widthMeters,
+				heightMeters: track.heightMeters,
+				topdownWPx: track.topdownPx.w,
+				topdownHPx: track.topdownPx.h,
+				imageKey,
+				trackJson,
+				updatedAt: now,
+			},
+		});
 
-	return jsonResponse(201, { id: track.id, imageKey, savedAt: now });
+	return c.json(
+		{
+			id: track.id,
+			imageKey,
+			savedAt: now.toISOString(),
+		},
+		201,
+	);
 }
 
-async function getTrack(trackId: string, db: D1Client): Promise<Response> {
-	const row = await db
-		.prepare(
-			`SELECT id, track_json, created_at, updated_at
-			 FROM tracks
-			 WHERE id = ?`,
-		)
-		.bind(trackId)
-		.first<TrackRow>();
+async function getTrack(c: TrackLibraryContext): Promise<Response> {
+	const trackId = c.req.param('id');
+	if (!trackId) {
+		return jsonError(c, 404, 'Track not found.');
+	}
+
+	const [row] = await c
+		.get('db')
+		.select({
+			id: tracks.id,
+			trackJson: tracks.trackJson,
+			createdAt: tracks.createdAt,
+			updatedAt: tracks.updatedAt,
+		})
+		.from(tracks)
+		.where(eq(tracks.id, trackId))
+		.limit(1);
 	if (!row) {
-		return jsonError(404, 'Track not found.');
+		return jsonError(c, 404, 'Track not found.');
 	}
 
-	const track = parseTrackJson(row.track_json);
+	const track = parseTrackJson(row.trackJson);
 	if (!track) {
-		return jsonError(500, 'Stored track_json is invalid.');
+		return jsonError(c, 500, 'Stored track_json is invalid.');
 	}
 
-	return jsonResponse(200, {
+	return c.json({
 		track,
-		createdAt: row.created_at,
-		updatedAt: row.updated_at,
+		createdAt: row.createdAt.toISOString(),
+		updatedAt: row.updatedAt.toISOString(),
 		imageUrl: `/api/tracks/${encodeURIComponent(row.id)}/topdown.png`,
 	});
 }
 
-async function getTrackImage(
-	trackId: string,
-	db: D1Client,
-	images: R2Client,
-): Promise<Response> {
-	const row = await db
-		.prepare(
-			`SELECT image_key
-			 FROM tracks
-			 WHERE id = ?`,
-		)
-		.bind(trackId)
-		.first<TrackRow>();
-	if (!row) {
-		return jsonError(404, 'Track not found.');
+async function getTrackImage(c: TrackLibraryContext): Promise<Response> {
+	const trackId = c.req.param('id');
+	if (!trackId) {
+		return jsonError(c, 404, 'Track not found.');
 	}
 
-	const image = await images.get(row.image_key);
+	const [row] = await c
+		.get('db')
+		.select({ imageKey: tracks.imageKey })
+		.from(tracks)
+		.where(eq(tracks.id, trackId))
+		.limit(1);
+	if (!row) {
+		return jsonError(c, 404, 'Track not found.');
+	}
+
+	const image = await getImages(c).get(row.imageKey);
 	if (!image || !image.body) {
-		return jsonError(404, 'Track image not found.');
+		return jsonError(c, 404, 'Track image not found.');
 	}
 
 	const headers = new Headers();
@@ -316,6 +271,10 @@ async function getTrackImage(
 		status: 200,
 		headers,
 	});
+}
+
+function getImages(c: TrackLibraryContext): R2Bucket {
+	return c.env.TRACK_IMAGES as R2Bucket;
 }
 
 function parseTrackJson(raw: string): TrackDef | null {
@@ -342,9 +301,11 @@ function decodeBase64(input: string): Uint8Array | null {
 		const normalized = input.replace(/\s+/g, '');
 		const atobFn = globalThis.atob;
 		if (typeof atobFn !== 'function') {
-			const bufferCtor = (globalThis as {
-				Buffer?: { from(data: string, encoding: string): Uint8Array };
-			}).Buffer;
+			const bufferCtor = (
+				globalThis as {
+					Buffer?: { from(data: string, encoding: string): Uint8Array };
+				}
+			).Buffer;
 			if (!bufferCtor) return null;
 			return new Uint8Array(bufferCtor.from(normalized, 'base64'));
 		}
@@ -360,25 +321,20 @@ function decodeBase64(input: string): Uint8Array | null {
 	}
 }
 
-async function parseJsonBody(request: Request): Promise<unknown> {
+async function parseJsonBody(c: TrackLibraryContext): Promise<unknown> {
 	try {
-		return await request.json();
+		return await c.req.json();
 	} catch {
 		return null;
 	}
 }
 
-function jsonResponse(status: number, body: unknown): Response {
-	return new Response(JSON.stringify(body), {
-		status,
-		headers: {
-			'content-type': 'application/json; charset=utf-8',
-		},
-	});
-}
-
-function jsonError(status: number, message: string): Response {
-	return jsonResponse(status, { error: message });
+function jsonError(
+	c: TrackLibraryContext,
+	status: 400 | 404 | 413 | 500 | 503,
+	message: string,
+): Response {
+	return c.json({ error: message }, status);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -389,7 +345,9 @@ function isSafeTrackId(trackId: string): boolean {
 	return /^[A-Za-z0-9_-]+$/.test(trackId);
 }
 
-function readPngSize(bytes: Uint8Array): { width: number; height: number } | null {
+function readPngSize(
+	bytes: Uint8Array,
+): { width: number; height: number } | null {
 	// Minimum bytes needed to read PNG signature + IHDR length/type + IHDR width/height.
 	if (bytes.byteLength < 24) return null;
 	for (let i = 0; i < PNG_SIGNATURE.length; i++) {
