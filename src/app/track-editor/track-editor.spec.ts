@@ -1,20 +1,56 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Opencv } from '../opencv';
-import { TrackApiClient } from '../state/track-api-client';
+import {
+	TrackApiClient,
+	type TrackApiError,
+	type TrackGetResponse,
+	type TrackListResponse,
+} from '../state/track-api-client';
 import { TrackStore } from '../state/track-store';
+import { TRACK_SCHEMA_VERSION, type TrackDef } from '../track-types';
 import { TrackEditor } from './track-editor';
+
+const SAVED_TRACK: TrackDef = {
+	schemaVersion: TRACK_SCHEMA_VERSION,
+	id: 'saved-track',
+	name: 'Cloud Track',
+	widthMeters: 20,
+	heightMeters: 12,
+	topdownPx: { w: 1600, h: 900 },
+	zones: [],
+	centerline: [],
+};
+const RealImage = globalThis.Image;
 
 describe('TrackEditor', () => {
 	let component: TrackEditor;
 	let fixture: ComponentFixture<TrackEditor>;
 	let store: TrackStore;
-	let saveTrack: ReturnType<typeof vi.fn>;
+	let trackApiClient: {
+		listTracks: ReturnType<typeof vi.fn>;
+		getTrack: ReturnType<typeof vi.fn>;
+		getTrackImageUrl: ReturnType<typeof vi.fn>;
+		saveTrack: ReturnType<typeof vi.fn>;
+	};
 
 	beforeEach(async () => {
-		saveTrack = vi.fn();
+		trackApiClient = {
+			listTracks: vi.fn().mockReturnValue(
+				of<TrackListResponse>({
+					items: [],
+					page: 1,
+					pageSize: 25,
+				}),
+			),
+			getTrack: vi.fn(),
+			getTrackImageUrl: vi
+				.fn()
+				.mockImplementation((id: string) => `/api/tracks/${id}/topdown.png`),
+			saveTrack: vi.fn(),
+		};
 
 		await TestBed.configureTestingModule({
 			imports: [TrackEditor],
@@ -28,12 +64,7 @@ describe('TrackEditor', () => {
 						warpPerspective: vi.fn(),
 					},
 				},
-				{
-					provide: TrackApiClient,
-					useValue: {
-						saveTrack,
-					},
-				},
+				{ provide: TrackApiClient, useValue: trackApiClient },
 			],
 		}).compileComponents();
 
@@ -41,10 +72,124 @@ describe('TrackEditor', () => {
 		component = fixture.componentInstance;
 		store = TestBed.inject(TrackStore);
 		await fixture.whenStable();
+		fixture.detectChanges();
+	});
+
+	afterEach(() => {
+		globalThis.Image = RealImage;
 	});
 
 	it('should create', () => {
 		expect(component).toBeTruthy();
+	});
+
+	it('loads saved tracks when the library is opened', async () => {
+		trackApiClient.listTracks.mockReturnValue(
+			of<TrackListResponse>({
+				items: [
+					{
+						id: 'saved-track',
+						name: 'Cloud Track',
+						widthMeters: 20,
+						heightMeters: 12,
+						topdownPx: { w: 1600, h: 900 },
+						createdAt: '2024-01-01T00:00:00.000Z',
+						updatedAt: '2024-01-02T00:00:00.000Z',
+						imageUrl: '/api/tracks/saved-track/topdown.png',
+					},
+				],
+				page: 1,
+				pageSize: 25,
+			}),
+		);
+
+		clickButton(fixture, 'Browse saved tracks');
+		await fixture.whenStable();
+		fixture.detectChanges();
+
+		expect(trackApiClient.listTracks).toHaveBeenCalledTimes(1);
+		expect(fixture.nativeElement.textContent).toContain('Cloud Track');
+		expect(fixture.nativeElement.textContent).toContain('Open track');
+	});
+
+	it('shows error, refresh, and empty states for the saved tracks library', async () => {
+		trackApiClient.listTracks
+			.mockReturnValueOnce(
+				throwError(
+					() =>
+						({
+							status: 503,
+							message: 'Cloud track library is not configured.',
+						}) satisfies TrackApiError,
+				),
+			)
+			.mockReturnValueOnce(
+				of<TrackListResponse>({
+					items: [],
+					page: 1,
+					pageSize: 25,
+				}),
+			);
+
+		clickButton(fixture, 'Browse saved tracks');
+		await fixture.whenStable();
+		fixture.detectChanges();
+
+		expect(fixture.nativeElement.textContent).toContain(
+			'Cloud track library is not configured.',
+		);
+
+		clickButton(fixture, 'Refresh');
+		await fixture.whenStable();
+		fixture.detectChanges();
+
+		expect(trackApiClient.listTracks).toHaveBeenCalledTimes(2);
+		expect(fixture.nativeElement.textContent).toContain('No saved tracks yet.');
+	});
+
+	it('opens a saved track from the library', async () => {
+		trackApiClient.listTracks.mockReturnValue(
+			of<TrackListResponse>({
+				items: [
+					{
+						id: SAVED_TRACK.id,
+						name: SAVED_TRACK.name,
+						widthMeters: SAVED_TRACK.widthMeters,
+						heightMeters: SAVED_TRACK.heightMeters,
+						topdownPx: SAVED_TRACK.topdownPx,
+						createdAt: '2024-01-01T00:00:00.000Z',
+						updatedAt: '2024-01-02T00:00:00.000Z',
+						imageUrl: '/api/tracks/saved-track/topdown.png',
+					},
+				],
+				page: 1,
+				pageSize: 25,
+			}),
+		);
+		trackApiClient.getTrack.mockReturnValue(
+			of<TrackGetResponse>({
+				track: SAVED_TRACK,
+				createdAt: '2024-01-01T00:00:00.000Z',
+				updatedAt: '2024-01-02T00:00:00.000Z',
+				imageUrl: '/api/tracks/saved-track/topdown.png',
+			}),
+		);
+		globalThis.Image = createMockImageConstructor(1600, 900);
+
+		clickButton(fixture, 'Browse saved tracks');
+		await fixture.whenStable();
+		fixture.detectChanges();
+
+		clickButton(fixture, 'Open track');
+		await fixture.whenStable();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		fixture.detectChanges();
+
+		expect(trackApiClient.getTrack).toHaveBeenCalledWith('saved-track');
+		expect(trackApiClient.getTrackImageUrl).toHaveBeenCalledWith('saved-track');
+		expect(component.step()).toBe('annotate');
+		expect(component.name()).toBe('Cloud Track');
+		expect(component.topDown()).toBeTruthy();
 	});
 
 	it('does not send a cloud save request when export is invalid', () => {
@@ -57,7 +202,7 @@ describe('TrackEditor', () => {
 		component.saveToCloud();
 		fixture.detectChanges();
 
-		expect(saveTrack).not.toHaveBeenCalled();
+		expect(trackApiClient.saveTrack).not.toHaveBeenCalled();
 		expect(fixture.nativeElement.textContent).toContain(
 			'Resolve all export errors before saving to cloud.',
 		);
@@ -65,7 +210,7 @@ describe('TrackEditor', () => {
 
 	it('saves a valid export to the cloud and shows confirmation', () => {
 		seedValidExportState(store);
-		saveTrack.mockReturnValue(
+		trackApiClient.saveTrack.mockReturnValue(
 			of({
 				id: 'saved-track',
 				imageKey: 'tracks/saved-track/topdown.png',
@@ -77,7 +222,7 @@ describe('TrackEditor', () => {
 		component.saveToCloud();
 		fixture.detectChanges();
 
-		expect(saveTrack).toHaveBeenCalledWith(
+		expect(trackApiClient.saveTrack).toHaveBeenCalledWith(
 			expect.objectContaining({
 				id: 'saved-track',
 				name: 'Saved Track',
@@ -94,7 +239,7 @@ describe('TrackEditor', () => {
 
 	it('shows actionable API errors when cloud save fails', () => {
 		seedValidExportState(store);
-		saveTrack.mockReturnValue(
+		trackApiClient.saveTrack.mockReturnValue(
 			throwError(() => ({
 				status: 400,
 				message: 'topdownPngBase64 is required.',
@@ -105,13 +250,32 @@ describe('TrackEditor', () => {
 		component.saveToCloud();
 		fixture.detectChanges();
 
-		expect(saveTrack).toHaveBeenCalledOnce();
+		expect(trackApiClient.saveTrack).toHaveBeenCalledOnce();
 		expect(fixture.nativeElement.textContent).toContain('Cloud save failed');
 		expect(fixture.nativeElement.textContent).toContain(
 			'topdownPngBase64 is required.',
 		);
 	});
 });
+
+function clickButton(
+	fixture: ComponentFixture<TrackEditor>,
+	label: string,
+): void {
+	const buttons = Array.from(
+		(fixture.nativeElement as HTMLElement).querySelectorAll('button'),
+	) as HTMLButtonElement[];
+	const button = buttons.find((element) =>
+		element.textContent?.includes(label),
+	);
+
+	if (!(button instanceof HTMLButtonElement)) {
+		throw new Error(`Could not find button: ${label}`);
+	}
+
+	button.click();
+	fixture.detectChanges();
+}
 
 function seedValidExportState(store: TrackStore) {
 	const canvas = document.createElement('canvas');
@@ -161,4 +325,22 @@ function getButtonByText(
 	}
 
 	return button;
+}
+
+function createMockImageConstructor(
+	width: number,
+	height: number,
+): typeof Image {
+	return class MockImage {
+		onload: null | (() => void) = null;
+		onerror: null | (() => void) = null;
+		width = width;
+		height = height;
+		naturalWidth = width;
+		naturalHeight = height;
+
+		set src(_value: string) {
+			queueMicrotask(() => this.onload?.());
+		}
+	} as unknown as typeof Image;
 }
