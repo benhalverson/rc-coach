@@ -18,8 +18,8 @@
 		{
 			"binding": "TRACKS_DB",
 			"database_name": "rc-coach-tracks",
-			"database_id": "00000000-0000-0000-0000-000000000000",
-			"preview_database_id": "00000000-0000-0000-0000-000000000000"
+			"database_id": "81c31dd5-c411-45ed-a0b9-9845b711fa66",
+			"migrations_dir": "drizzle"
 		}
 	]
 	/**
