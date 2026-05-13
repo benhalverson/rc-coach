@@ -62,6 +62,27 @@ describe('recommendSetupChanges', () => {
 		expect(result.recommendations[0].reasoning).toContain('side bite');
 	});
 
+	it('maps poor forward drive to an improve-drive recommendation', () => {
+		const result = recommendSetupChanges({
+			reports: [
+				{
+					symptom: 'poor-forward-drive',
+					phase: 'corner-exit',
+					severity: 2,
+				},
+			],
+		});
+
+		expect(result.recommendations).toEqual([
+			expect.objectContaining({
+				id: 'rear-spring-softer',
+				groupId: 'improve-drive',
+				priority: 'medium',
+			}),
+		]);
+		expect(result.recommendations[0].reasoning).toContain('forward drive');
+	});
+
 	it('adds high-grip traction roll recommendations from track context', () => {
 		const result = recommendSetupChanges({
 			trackContext: { grip: 'high' },

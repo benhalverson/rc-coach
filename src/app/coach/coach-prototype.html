@@ -204,7 +204,8 @@
                             <span>{{ rec.direction }}</span>
                           </div>
                         </div>
-                        <span class="rounded-full border px-2 py-1 text-xs font-medium" [ngClass]="priorityClasses(rec.priority)">
+                        <span
+                          [class]="'rounded-full border px-2 py-1 text-xs font-medium ' + priorityClasses(rec.priority)">
                           {{ rec.priority }}
                         </span>
                       </div>
@@ -220,11 +221,14 @@
                       <div class="mt-3 border-t border-neutral-800 pt-3 text-xs text-neutral-500">
                         Evidence:
                         @for (match of rec.matchedReports; track match.ruleId + match.phase + $index) {
-                          <span class="ml-1">
-                            {{ labelForSymptom(match.symptom) }} / {{ labelForPhase(match.phase) }} / {{ labelForSeverity(match.severity) }}
-                            @if (!$last) {
-                              <span>;</span>
-                            }
+                            <span class="ml-1">
+                              {{ labelForSymptom(match.symptom) }} / {{ labelForPhase(match.phase) }} / {{ labelForSeverity(match.severity) }}
+                              @if (match.sectionId) {
+                                <span> / {{ match.sectionId }}</span>
+                              }
+                              @if (!$last) {
+                                <span>;</span>
+                              }
                           </span>
                         }
                       </div>
