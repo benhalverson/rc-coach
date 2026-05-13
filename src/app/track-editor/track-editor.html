@@ -445,11 +445,38 @@
         [title]="!exportValid() ? 'Resolve all errors above to enable download' : ''"
         (click)="downloadTrackJson()">Download track.json</button>
 
+      <button class="rounded-lg border border-emerald-700 px-3 py-2 text-emerald-200 hover:bg-emerald-950 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+        [disabled]="!exportValid() || saveInFlight()"
+        [attr.aria-busy]="saveInFlight()"
+        [title]="saveInFlight() ? 'Saving track to cloud' : !exportValid() ? 'Resolve all errors above to save to cloud' : ''"
+        (click)="saveToCloud()">{{ saveInFlight() ? 'Saving…' : 'Save to cloud' }}</button>
+
       <button class="rounded-lg border border-cyan-700 px-3 py-2 text-cyan-200 hover:bg-cyan-950 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
         [disabled]="!exportValid()"
         [title]="!exportValid() ? 'Resolve all errors above to open the viewer' : ''"
         (click)="step.set('viewer')">Open viewer (no reupload)</button>
     </div>
+
+    @if (!exportValid()) {
+      <div class="text-xs text-neutral-400">
+        Save to cloud is available once export errors are resolved.
+      </div>
+    }
+
+    @if (saveError()) {
+      <div role="alert" aria-live="polite"
+        class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-neutral-100">
+        <div class="font-semibold mb-1 text-red-300">Cloud save failed</div>
+        <div>{{ saveError() }}</div>
+      </div>
+    }
+
+    @if (saveSuccess(); as saved) {
+      <div role="status" aria-live="polite"
+        class="rounded-lg border border-emerald-700 bg-neutral-900 p-3 text-sm text-emerald-100">
+        Saved "{{ saved.name }}" to cloud as <code>{{ saved.id }}</code>.
+      </div>
+    }
 
     <pre class="overflow-auto rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300"
       *ngIf="trackDef() as t">{{ t | json }}</pre>
