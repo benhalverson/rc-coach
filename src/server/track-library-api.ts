@@ -4,6 +4,7 @@ import { validateTrackDef } from '../app/state/track-validation';
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
+const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
 type D1Result<T> = { results: T[] };
 
@@ -189,6 +190,19 @@ async function saveTrack(
 	if (imageBytes.byteLength > MAX_IMAGE_BYTES) {
 		return jsonError(413, 'topdownPngBase64 exceeds max allowed size.');
 	}
+	const pngSize = readPngSize(imageBytes);
+	if (!pngSize) {
+		return jsonError(400, 'topdownPngBase64 must decode to a valid PNG image.');
+	}
+	if (
+		pngSize.width !== track.topdownPx.w ||
+		pngSize.height !== track.topdownPx.h
+	) {
+		return jsonError(
+			400,
+			`PNG dimensions (${pngSize.width}x${pngSize.height}) do not match track.topdownPx (${track.topdownPx.w}x${track.topdownPx.h}).`,
+		);
+	}
 
 	const imageKey = `tracks/${track.id}/topdown.png`;
 	await images.put(imageKey, imageBytes, {
@@ -373,4 +387,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isSafeTrackId(trackId: string): boolean {
 	return /^[A-Za-z0-9_-]+$/.test(trackId);
+}
+
+function readPngSize(bytes: Uint8Array): { width: number; height: number } | null {
+	// Minimum bytes needed to read PNG signature + IHDR length/type + IHDR width/height.
+	if (bytes.byteLength < 24) return null;
+	for (let i = 0; i < PNG_SIGNATURE.length; i++) {
+		if (bytes[i] !== PNG_SIGNATURE[i]) return null;
+	}
+
+	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+	const ihdrLength = view.getUint32(8);
+	if (ihdrLength !== 13) return null;
+
+	if (
+		bytes[12] !== 73 || // I
+		bytes[13] !== 72 || // H
+		bytes[14] !== 68 || // D
+		bytes[15] !== 82 // R
+	) {
+		return null;
+	}
+
+	const width = view.getUint32(16);
+	const height = view.getUint32(20);
+	if (width === 0 || height === 0) return null;
+	return { width, height };
 }

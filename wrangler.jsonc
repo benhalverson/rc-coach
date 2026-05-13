@@ -11,6 +11,20 @@
 		"binding": "ASSETS",
 		"directory": "./dist/browser"
 	},
+	"d1_databases": [
+		{
+			"binding": "TRACKS_DB",
+			"database_name": "rc_coach_tracks",
+			// Replace with your real database ID from `wrangler d1 create rc_coach_tracks`.
+			"database_id": "REPLACE_WITH_D1_DATABASE_ID"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "TRACK_IMAGES",
+			"bucket_name": "rc-coach-track-images"
+		}
+	],
 	"observability": {
 		"enabled": true
 	}

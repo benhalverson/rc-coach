@@ -6,6 +6,10 @@ import {
 } from './track-library-api';
 
 describe('handleTrackLibraryRequest', () => {
+	const oneByOnePng = decodeBase64(
+		'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2l5QAAAABJRU5ErkJggg==',
+	);
+
 	it('returns 503 when cloud bindings are missing', async () => {
 		const response = await handleTrackLibraryRequest(
 			new Request('https://example.com/api/tracks'),
@@ -17,7 +21,7 @@ describe('handleTrackLibraryRequest', () => {
 	it('saves, lists, and retrieves a track with image', async () => {
 		const env = createMockEnv();
 		const track = createTrack();
-		const imageBytes = new Uint8Array([137, 80, 78, 71]);
+		const imageBytes = oneByOnePng;
 
 		const saveResponse = await handleTrackLibraryRequest(
 			new Request('https://example.com/api/tracks', {
@@ -69,7 +73,46 @@ describe('handleTrackLibraryRequest', () => {
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					track,
-					topdownPngBase64: encodeBase64(new Uint8Array([137, 80, 78, 71])),
+					topdownPngBase64: encodeBase64(oneByOnePng),
+				}),
+			}),
+			env,
+		);
+
+		expect(response?.status).toBe(400);
+	});
+
+	it('rejects invalid png bytes', async () => {
+		const env = createMockEnv();
+		const track = createTrack();
+
+		const response = await handleTrackLibraryRequest(
+			new Request('https://example.com/api/tracks', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					track,
+					topdownPngBase64: encodeBase64(new Uint8Array([1, 2, 3, 4])),
+				}),
+			}),
+			env,
+		);
+
+		expect(response?.status).toBe(400);
+	});
+
+	it('rejects png dimensions that do not match track.topdownPx', async () => {
+		const env = createMockEnv();
+		const track = createTrack();
+		track.topdownPx = { w: 2, h: 2 };
+
+		const response = await handleTrackLibraryRequest(
+			new Request('https://example.com/api/tracks', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					track,
+					topdownPngBase64: encodeBase64(oneByOnePng),
 				}),
 			}),
 			env,
@@ -86,7 +129,7 @@ function createTrack(): TrackDef {
 		name: 'Test Track',
 		widthMeters: 20,
 		heightMeters: 12,
-		topdownPx: { w: 1600, h: 900 },
+		topdownPx: { w: 1, h: 1 },
 		zones: [
 			{
 				id: 'z1',
@@ -111,6 +154,15 @@ function encodeBase64(bytes: Uint8Array): string {
 		binary += String.fromCharCode(value);
 	}
 	return btoa(binary);
+}
+
+function decodeBase64(value: string): Uint8Array {
+	const binary = atob(value);
+	const bytes = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++) {
+		bytes[i] = binary.charCodeAt(i);
+	}
+	return bytes;
 }
 
 function createMockEnv(): TrackLibraryEnv {
