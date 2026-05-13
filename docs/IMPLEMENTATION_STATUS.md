@@ -16,6 +16,7 @@ and what is still missing.
 - Edit a centerline by adding, dragging, undoing, and clearing points: [`src/app/centerline-editor/centerline-editor.ts`](../src/app/centerline-editor/centerline-editor.ts), [`src/app/centerline-editor/centerline-editor.html`](../src/app/centerline-editor/centerline-editor.html)
 - **Derived centerline geometry** (arc lengths, cumulative distance, tangent/normal vectors) computed from stored centerline points for the follower demo: [`src/app/geometry/derived-centerline.ts`](../src/app/geometry/derived-centerline.ts), [`src/app/geometry/centerline-params.ts`](../src/app/geometry/centerline-params.ts)
 - Export `topdown.png` and `track.json` (with `schemaVersion: 1`): [`src/app/state/track-store.ts`](../src/app/state/track-store.ts), [`src/app/track-types.ts`](../src/app/track-types.ts), [`src/app/track-editor/track-editor.html`](../src/app/track-editor/track-editor.html)
+- Cloud track library API for save/list/get via Cloudflare D1 + R2: [`src/server/track-library-api.ts`](../src/server/track-library-api.ts), [`src/server.api.ts`](../src/server.api.ts), [`docs/CLOUD_TRACK_LIBRARY_CONTRACT.md`](./CLOUD_TRACK_LIBRARY_CONTRACT.md)
 - Show a centerline follower demo with steering and speed controls inside the editor flow: [`src/app/centerline-demo/centerline-demo.ts`](../src/app/centerline-demo/centerline-demo.ts), [`src/app/centerline-demo/centerline-demo.html`](../src/app/centerline-demo/centerline-demo.html), [`src/app/track-editor/track-editor.html`](../src/app/track-editor/track-editor.html)
 
 ## Partial or Suspicious
@@ -27,7 +28,7 @@ and what is still missing.
 
 ## Missing
 
-- No persistent backend storage or sync layer for saved tracks (tracked in [issue #57](https://github.com/benhalverson/rc-coach/issues/57)): [`README.md`](../README.md), [`src/app/state/track-store.ts`](../src/app/state/track-store.ts)
+- Editor UI does not yet surface cloud save/list/reload controls; current fallback remains local file import/export in the existing single-route workflow: [`src/app/track-editor/track-editor.html`](../src/app/track-editor/track-editor.html), [`src/app/state/track-store.ts`](../src/app/state/track-store.ts)
 - No advanced zone tooling such as snapping, richer parameters, or spline-based shape creation (tracked in [issue #56](https://github.com/benhalverson/rc-coach/issues/56)): [`src/app/topdown-annotator/topdown-annotator.ts`](../src/app/topdown-annotator/topdown-annotator.ts)
 - No centerline smoothing or higher-level editing tools beyond add/drag/undo/clear (tracked in [issue #56](https://github.com/benhalverson/rc-coach/issues/56)): [`src/app/centerline-editor/centerline-editor.ts`](../src/app/centerline-editor/centerline-editor.ts)
 - No dedicated standalone viewer page separate from the export step (tracked in [issue #55](https://github.com/benhalverson/rc-coach/issues/55)): [`src/app/track-editor/track-editor.html`](../src/app/track-editor/track-editor.html), [`src/app/centerline-demo/centerline-demo.ts`](../src/app/centerline-demo/centerline-demo.ts)
@@ -57,4 +58,3 @@ and what is still missing.
 
 - This document is intentionally descriptive only. It does not change product behavior.
 - The current MVP is still a single-route editor driven from [`src/app/app.routes.ts`](../src/app/app.routes.ts).
-

@@ -21,7 +21,13 @@
 			"database_id": "81c31dd5-c411-45ed-a0b9-9845b711fa66",
 			"migrations_dir": "drizzle"
 		}
-	]
+	],
+	"r2_buckets": [
+		{
+			"binding": "TRACK_IMAGES",
+			"bucket_name": "rc-coach-track-images"
+		}
+	],
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

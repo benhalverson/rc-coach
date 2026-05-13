@@ -1,16 +1,17 @@
 import { Hono } from 'hono';
-import { requireDb, type ServerDb } from './server.db';
-import { MISSING_TRACKS_DB_MESSAGE, type ServerEnv } from './server.env';
+import {
+	registerTrackLibraryRoutes,
+	type TrackLibraryHonoEnv,
+} from './server/track-library-api';
+import { requireDb } from './server.db';
+import { MISSING_TRACKS_DB_MESSAGE } from './server.env';
 
-type ApiEnv = {
-	Bindings: Partial<ServerEnv>;
-	Variables: {
-		db: ServerDb;
-	};
-};
+type ApiEnv = TrackLibraryHonoEnv;
 
 export const createApiApp = () => {
 	const app = new Hono<ApiEnv>();
+
+	registerTrackLibraryRoutes(app);
 
 	app.use('/api/*', async (c, next) => {
 		try {
