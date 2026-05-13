@@ -227,27 +227,31 @@ export class TrackEditor {
 			});
 	}
 
-	private loadImage(url: string): Promise<HTMLImageElement> {
+	loadImage(url: string): Promise<HTMLImageElement> {
 		return new Promise((resolve, reject) => {
 			const image = new Image();
 			image.onload = () => resolve(image);
 			image.onerror = () =>
-				reject(new Error('Failed to load the saved track preview.'));
+				reject(new Error('Failed to load the saved track image.'));
 			image.src = url;
 		});
 	}
 
 	private getTrackApiErrorMessage(error: unknown): string {
-		if (
-			error !== null &&
-			typeof error === 'object' &&
-			'message' in error &&
-			typeof (error as { message?: unknown }).message === 'string'
-		) {
-			return (error as { message: string }).message;
+		if (hasErrorMessage(error)) {
+			return error.message;
 		}
 
 		return 'Unable to load saved tracks right now.';
 	}
+}
+
+function hasErrorMessage(error: unknown): error is { message: string } {
+	return (
+		error !== null &&
+		typeof error === 'object' &&
+		'message' in error &&
+		typeof error.message === 'string'
+	);
 }
 // Using store-provided signals; no local Step type needed.

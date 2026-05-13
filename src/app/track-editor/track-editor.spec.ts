@@ -151,7 +151,7 @@ describe('TrackEditor', () => {
 				imageUrl: '/api/tracks/saved-track/topdown.png',
 			}),
 		);
-		vi.spyOn(component as any, 'loadImage').mockResolvedValue(
+		vi.spyOn(component, 'loadImage').mockResolvedValue(
 			createImage(1600, 900),
 		);
 
