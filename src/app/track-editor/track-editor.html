@@ -395,20 +395,26 @@
         (click)="step.set('viewer')">Open viewer (no reupload)</button>
     </div>
 
-    <div *ngIf="!exportValid()" class="text-xs text-neutral-400">
-      Save to cloud is available once export errors are resolved.
-    </div>
+    @if (!exportValid()) {
+      <div class="text-xs text-neutral-400">
+        Save to cloud is available once export errors are resolved.
+      </div>
+    }
 
-    <div *ngIf="saveError()" role="alert" aria-live="polite"
-      class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-neutral-100">
-      <div class="font-semibold mb-1 text-red-300">Cloud save failed</div>
-      <div>{{ saveError() }}</div>
-    </div>
+    @if (saveError()) {
+      <div role="alert" aria-live="polite"
+        class="rounded-lg border border-red-700 bg-neutral-900 p-3 text-sm text-neutral-100">
+        <div class="font-semibold mb-1 text-red-300">Cloud save failed</div>
+        <div>{{ saveError() }}</div>
+      </div>
+    }
 
-    <div *ngIf="saveSuccess() as saved" role="status" aria-live="polite"
-      class="rounded-lg border border-emerald-700 bg-neutral-900 p-3 text-sm text-emerald-100">
-      Saved "{{ saved.name }}" to cloud as <code>{{ saved.id }}</code>.
-    </div>
+    @if (saveSuccess(); as saved) {
+      <div role="status" aria-live="polite"
+        class="rounded-lg border border-emerald-700 bg-neutral-900 p-3 text-sm text-emerald-100">
+        Saved "{{ saved.name }}" to cloud as <code>{{ saved.id }}</code>.
+      </div>
+    }
 
     <pre class="overflow-auto rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300"
       *ngIf="trackDef() as t">{{ t | json }}</pre>
