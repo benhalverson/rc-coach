@@ -1,0 +1,37 @@
+import { Hono } from 'hono';
+import { requireDb, type ServerDb } from './server.db';
+import { MISSING_TRACKS_DB_MESSAGE, type ServerEnv } from './server.env';
+
+type ApiEnv = {
+	Bindings: Partial<ServerEnv>;
+	Variables: {
+		db: ServerDb;
+	};
+};
+
+export const createApiApp = () => {
+	const app = new Hono<ApiEnv>();
+
+	app.use('/api/*', async (c, next) => {
+		try {
+			c.set('db', requireDb(c.env));
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : MISSING_TRACKS_DB_MESSAGE;
+
+			return c.json({ error: message }, 500);
+		}
+
+		return next();
+	});
+
+	app.get('/api/health', (c) => {
+		c.get('db');
+
+		return c.json({ ok: true });
+	});
+
+	return app;
+};
+
+export const apiApp = createApiApp();
