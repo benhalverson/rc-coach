@@ -35,6 +35,18 @@ describe('TopdownAnnotator', () => {
 		) as HTMLCanvasElement;
 		canvas.width = w;
 		canvas.height = h;
+		canvas.getBoundingClientRect = () =>
+			({
+				left: 0,
+				top: 0,
+				width: w,
+				height: h,
+				right: w,
+				bottom: h,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			}) as DOMRect;
 		return canvas;
 	}
 
@@ -91,6 +103,46 @@ describe('TopdownAnnotator', () => {
 
 		expect(emitted[0]).toHaveLength(2);
 		expect(emitted[0][0].id).toBe('existing');
+	});
+
+	it('onPointerDown: clamps polygon vertices to canvas bounds before export', () => {
+		setCanvasSize();
+		const emitted: Zone[][] = [];
+		component.zonesOut.subscribe((z) => emitted.push(z));
+		component.setDrawMode('polygon');
+
+		component.onPointerDown(
+			new PointerEvent('pointerdown', {
+				clientX: -0.07,
+				clientY: 62.43,
+				pointerId: 1,
+			}),
+		);
+		component.onPointerDown(
+			new PointerEvent('pointerdown', {
+				clientX: 50,
+				clientY: 10,
+				pointerId: 1,
+			}),
+		);
+		component.onPointerDown(
+			new PointerEvent('pointerdown', {
+				clientX: 30,
+				clientY: 90,
+				pointerId: 1,
+			}),
+		);
+
+		component.finishPolygon();
+
+		expect(component.polygonPoints()).toHaveLength(0);
+		expect(emitted).toHaveLength(1);
+		expect(emitted[0][0].poly).toHaveLength(3);
+		expect(emitted[0][0].poly[0][0]).toBe(0);
+		expect(emitted[0][0].poly[0][1]).toBeCloseTo(0.6243);
+		expect(
+			emitted[0][0].poly.flat().every((value) => value >= 0 && value <= 1),
+		).toBe(true);
 	});
 
 	// ── cancelPolygon ──────────────────────────────────────────────────────────

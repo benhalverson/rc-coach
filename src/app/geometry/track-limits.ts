@@ -1,5 +1,5 @@
 import type { Vec2, Zone } from '../track-types';
-import { poseAtArcLength, type CenterlineParams } from './centerline-params';
+import { type CenterlineParams, poseAtArcLength } from './centerline-params';
 
 /**
  * Track lateral limits as a function of arc-length.

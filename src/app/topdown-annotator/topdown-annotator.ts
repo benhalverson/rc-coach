@@ -65,6 +65,7 @@ export class TopdownAnnotator {
 
 	onPointerDown(ev: PointerEvent) {
 		ev.preventDefault();
+		const canvas = this.canvasRef().nativeElement;
 		const pt = this.pointerToCanvas(ev);
 		if (!pt) return;
 		const snapped = this.applySnapAndClamp(pt);
@@ -79,7 +80,7 @@ export class TopdownAnnotator {
 		if (vertexHit !== null) {
 			this.selectedVertexIndex.set(vertexHit);
 			this.draggingVertex.set(true);
-			this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
+			canvas.setPointerCapture(ev.pointerId);
 			return;
 		}
 
@@ -103,7 +104,7 @@ export class TopdownAnnotator {
 		this.selectedVertexIndex.set(null);
 		this.dragStart.set(snapped);
 		this.preview.set(null);
-		this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
+		canvas.setPointerCapture(ev.pointerId);
 	}
 
 	onPointerMove(ev: PointerEvent) {
