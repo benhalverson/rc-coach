@@ -3,7 +3,7 @@ import {
 	HttpErrorResponse,
 	HttpParams,
 } from '@angular/common/http';
-import { inject, Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { catchError, Observable, throwError } from 'rxjs';
 import type { TrackDef } from '../track-types';
 
@@ -76,6 +76,18 @@ export class TrackApiClient {
 	getTrack(id: string): Observable<TrackGetResponse> {
 		return this.http
 			.get<TrackGetResponse>(`/api/tracks/${encodeURIComponent(id)}`)
+			.pipe(catchError(handleError));
+	}
+
+	/**
+	 * Fetches the top-down PNG for a saved track as a Blob.
+	 * API failures are surfaced as a `TrackApiError`.
+	 */
+	getTrackImage(id: string): Observable<Blob> {
+		return this.http
+			.get(`/api/tracks/${encodeURIComponent(id)}/topdown.png`, {
+				responseType: 'blob',
+			})
 			.pipe(catchError(handleError));
 	}
 

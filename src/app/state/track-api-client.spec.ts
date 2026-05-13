@@ -1,9 +1,9 @@
+import { provideHttpClient } from '@angular/common/http';
 import {
 	HttpTestingController,
 	provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TRACK_SCHEMA_VERSION, type TrackDef } from '../track-types';
 import {
@@ -113,9 +113,7 @@ describe('TrackApiClient', () => {
 				expect(res.pageSize).toBe(25);
 			});
 
-			httpMock
-				.expectOne((r) => r.url === '/api/tracks')
-				.flush(mockResponse);
+			httpMock.expectOne((r) => r.url === '/api/tracks').flush(mockResponse);
 		});
 
 		it('surfaces a TrackApiError with status and message on 503', () => {
@@ -206,9 +204,12 @@ describe('TrackApiClient', () => {
 		it('URL-encodes the track id', () => {
 			client.getTrack('my track/1').subscribe();
 
-			httpMock
-				.expectOne('/api/tracks/my%20track%2F1')
-				.flush({ track: VALID_TRACK, createdAt: '', updatedAt: '', imageUrl: '' });
+			httpMock.expectOne('/api/tracks/my%20track%2F1').flush({
+				track: VALID_TRACK,
+				createdAt: '',
+				updatedAt: '',
+				imageUrl: '',
+			});
 		});
 
 		it('surfaces a TrackApiError with status 404 when not found', () => {
@@ -240,14 +241,60 @@ describe('TrackApiClient', () => {
 				},
 			});
 
-			httpMock
-				.expectOne('/api/tracks/bad')
-				.flush('Internal Server Error', {
-					status: 500,
-					statusText: 'Internal Server Error',
-				});
+			httpMock.expectOne('/api/tracks/bad').flush('Internal Server Error', {
+				status: 500,
+				statusText: 'Internal Server Error',
+			});
 
 			expect(caughtError?.status).toBe(500);
+			expect(typeof caughtError?.message).toBe('string');
+			expect(caughtError?.message.length).toBeGreaterThan(0);
+		});
+	});
+
+	describe('getTrackImage', () => {
+		it('sends GET /api/tracks/:id/topdown.png with responseType blob', () => {
+			const pngBlob = new Blob([new Uint8Array([137, 80, 78, 71])], {
+				type: 'image/png',
+			});
+
+			client.getTrackImage('track-1').subscribe((blob) => {
+				expect(blob).toBeInstanceOf(Blob);
+			});
+
+			const req = httpMock.expectOne('/api/tracks/track-1/topdown.png');
+			expect(req.request.method).toBe('GET');
+			expect(req.request.responseType).toBe('blob');
+			req.flush(pngBlob);
+		});
+
+		it('URL-encodes the track id', () => {
+			client.getTrackImage('my track/1').subscribe();
+
+			httpMock
+				.expectOne('/api/tracks/my%20track%2F1/topdown.png')
+				.flush(new Blob());
+		});
+
+		it('surfaces a TrackApiError with status 404 when image not found', () => {
+			let caughtError: TrackApiError | undefined;
+
+			client.getTrackImage('missing').subscribe({
+				error: (err: TrackApiError) => {
+					caughtError = err;
+				},
+			});
+
+			// For blob responseType, the error body must be a Blob — HttpTestingController
+			// cannot auto-convert JSON. The message falls back to error.message.
+			httpMock
+				.expectOne('/api/tracks/missing/topdown.png')
+				.flush(new Blob([], { type: 'image/png' }), {
+					status: 404,
+					statusText: 'Not Found',
+				});
+
+			expect(caughtError?.status).toBe(404);
 			expect(typeof caughtError?.message).toBe('string');
 			expect(caughtError?.message.length).toBeGreaterThan(0);
 		});
