@@ -281,6 +281,18 @@ describe('TrackStore – quad validation', () => {
 		expect(store.importTrack()).toBeNull();
 	});
 
+	it('applyImport: can restore into the dedicated viewer step', () => {
+		const fakeImg = { width: 800, height: 450 } as HTMLImageElement;
+
+		store.importTopdownImg.set(fakeImg);
+		store.importTrack.set(VALID_TRACK_DEF);
+
+		store.applyImport('viewer');
+
+		expect(store.step()).toBe('viewer');
+		expect(store.name()).toBe('Test Track');
+	});
+
 	// ── resetAll ─────────────────────────────────────────────────────────────
 
 	it('resetAll: clears importJsonError and importPngError', async () => {

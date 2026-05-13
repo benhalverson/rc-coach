@@ -2,6 +2,10 @@
   <div class="flex flex-wrap items-center gap-3">
     <h1 class="text-xl font-semibold">Track Editor</h1>
     <div class="ml-auto flex gap-2">
+      <a routerLink="/viewer"
+        class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px] inline-flex items-center">
+        Local Track Viewer
+      </a>
       <a routerLink="/coach"
         class="rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900 min-h-[44px] inline-flex items-center">
         Setup coach
@@ -455,6 +459,11 @@
         [disabled]="!exportValid()"
         [title]="!exportValid() ? 'Resolve all errors above to open the viewer' : ''"
         (click)="step.set('viewer')">Open viewer (no reupload)</button>
+
+      <a routerLink="/viewer"
+        class="inline-flex min-h-[44px] items-center rounded-lg border border-neutral-700 px-3 py-2 hover:bg-neutral-900">
+        Open Local Track Viewer
+      </a>
     </div>
 
     @if (!exportValid()) {
