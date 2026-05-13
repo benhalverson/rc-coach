@@ -4,7 +4,7 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TRACK_SCHEMA_VERSION, type TrackDef } from '../track-types';
 import {
 	TrackApiClient,
