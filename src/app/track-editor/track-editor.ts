@@ -2,14 +2,23 @@ import { CommonModule, JsonPipe } from '@angular/common';
 import {
 	ChangeDetectionStrategy,
 	Component,
+	DestroyRef,
 	inject,
+	signal,
 	viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
 import { QuadPicker } from '../quad-picker/quad-picker';
+import {
+	TrackApiClient,
+	type TrackApiError,
+	type TrackListItem,
+} from '../state/track-api-client';
 import { type Step, TrackStore } from '../state/track-store';
 import { TopdownAnnotator } from '../topdown-annotator/topdown-annotator';
 import type { Vec2, ZoneType } from '../track-types';
@@ -31,6 +40,8 @@ import type { Vec2, ZoneType } from '../track-types';
 })
 export class TrackEditor {
 	private readonly annotator = viewChild<TopdownAnnotator>('annotator');
+	private readonly destroyRef = inject(DestroyRef);
+	private readonly trackApiClient = inject(TrackApiClient);
 	private readonly store = inject(TrackStore);
 
 	readonly STEPS: { id: Step; label: string }[] = [
@@ -85,6 +96,11 @@ export class TrackEditor {
 	readonly importWarnings = this.store.importWarnings;
 	readonly importPngError = this.store.importPngError;
 	readonly importCompatibilityError = this.store.importCompatibilityError;
+	readonly showTrackLibrary = signal(false);
+	readonly trackLibraryLoading = signal(false);
+	readonly trackLibraryItems = signal<TrackListItem[]>([]);
+	readonly trackLibraryError = signal<string | null>(null);
+	readonly openingTrackId = signal<string | null>(null);
 
 	onFile(ev: Event) {
 		this.store.onFile(ev);
@@ -149,6 +165,89 @@ export class TrackEditor {
 
 	applyImport() {
 		this.store.applyImport();
+	}
+
+	toggleTrackLibrary() {
+		const next = !this.showTrackLibrary();
+		this.showTrackLibrary.set(next);
+		if (next) {
+			this.refreshTrackLibrary();
+		}
+	}
+
+	refreshTrackLibrary() {
+		this.trackLibraryLoading.set(true);
+		this.trackLibraryError.set(null);
+
+		this.trackApiClient
+			.listTracks()
+			.pipe(
+				takeUntilDestroyed(this.destroyRef),
+				finalize(() => this.trackLibraryLoading.set(false)),
+			)
+			.subscribe({
+				next: (response) => {
+					this.trackLibraryItems.set(response.items);
+				},
+				error: (error: TrackApiError) => {
+					this.trackLibraryItems.set([]);
+					this.trackLibraryError.set(this.getTrackApiErrorMessage(error));
+				},
+			});
+	}
+
+	openSavedTrack(id: string) {
+		if (this.openingTrackId()) {
+			return;
+		}
+
+		this.openingTrackId.set(id);
+		this.trackLibraryError.set(null);
+
+		this.trackApiClient
+			.getTrack(id)
+			.pipe(takeUntilDestroyed(this.destroyRef))
+			.subscribe({
+				next: async (response) => {
+					try {
+						const image = await this.loadImage(response.imageUrl);
+						this.importTrack.set(response.track);
+						this.importTopdownImg.set(image);
+						this.applyImport();
+					} catch (error) {
+						this.trackLibraryError.set(this.getTrackApiErrorMessage(error));
+					} finally {
+						this.openingTrackId.set(null);
+					}
+				},
+				error: (error: TrackApiError) => {
+					this.trackLibraryError.set(this.getTrackApiErrorMessage(error));
+					this.openingTrackId.set(null);
+				},
+			});
+	}
+
+	private loadImage(url: string): Promise<HTMLImageElement> {
+		return new Promise((resolve, reject) => {
+			const image = new Image();
+			image.onload = () => resolve(image);
+			image.onerror = () =>
+				reject(new Error('Failed to load the saved track preview.'));
+			image.src = url;
+		});
+	}
+
+	private getTrackApiErrorMessage(error: unknown): string {
+		if (
+			error !== null &&
+			typeof error === 'object' &&
+			'message' in error &&
+			typeof (error as { message?: unknown }).message === 'string'
+		) {
+			return (error as { message: string }).message;
+		}
+
+		return 'Unable to load saved tracks right now.';
 	}
 }
 // Using store-provided signals; no local Step type needed.
