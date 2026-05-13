@@ -130,5 +130,7 @@ function zoneColor(type: ZoneType): string {
  * Uses the same zone hue as the stroke with a translucent fill for readable inspection overlays.
  */
 function zoneFill(type: ZoneType): string {
-	return type === 'jump' ? 'rgba(34, 211, 238, 0.18)' : 'rgba(168, 85, 247, 0.18)';
+	return type === 'jump'
+		? 'rgba(34, 211, 238, 0.18)'
+		: 'rgba(168, 85, 247, 0.18)';
 }
