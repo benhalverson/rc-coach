@@ -71,6 +71,21 @@ describe('CenterlineEditor', () => {
 		expect(emitted[1][1][1]).toBeCloseTo(0.29, 4);
 	});
 
+	it('nudges selected points by one grid step when snapping is enabled', () => {
+		const emitted: Vec2[][] = [];
+		component.lineOut.subscribe((line) => emitted.push(line));
+		fixture.componentRef.setInput('lineIn', [[0.16, 0.16]] satisfies Vec2[]);
+		fixture.detectChanges();
+
+		component.snapEnabled.set(true);
+		component.selectedPointIndex.set(0);
+		component.nudgeSelectedPoint(1, 0);
+
+		expect(emitted).toHaveLength(1);
+		expect(emitted[0][0][0]).toBeCloseTo(0.24, 4);
+		expect(emitted[0][0][1]).toBeCloseTo(0.16, 4);
+	});
+
 	it('supports undo/redo for dragged point edits', () => {
 		const emitted: Vec2[][] = [];
 		component.lineOut.subscribe((line) => emitted.push(line));

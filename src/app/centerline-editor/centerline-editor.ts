@@ -186,10 +186,12 @@ export class CenterlineEditor {
 		if (idx === null) return;
 		const points = this.pts();
 		if (idx < 0 || idx >= points.length) return;
+		const stepPx = this.snapEnabled() ? 8 : 1;
+		const base = this.snapEnabled() ? snapPoint(points[idx], 8) : points[idx];
 		this.beginHistoryChange();
 		const next = this.applySnapAndClamp({
-			x: points[idx].x + dx,
-			y: points[idx].y + dy,
+			x: base.x + dx * stepPx,
+			y: base.y + dy * stepPx,
 		});
 		this.pts.set(points.map((p, i) => (i === idx ? next : p)));
 		this.emitLine();
