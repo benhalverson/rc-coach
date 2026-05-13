@@ -29,6 +29,7 @@ describe('TrackEditor', () => {
 	let trackApiClient: {
 		listTracks: ReturnType<typeof vi.fn>;
 		getTrack: ReturnType<typeof vi.fn>;
+		getTrackImageUrl: ReturnType<typeof vi.fn>;
 	};
 
 	beforeEach(async () => {
@@ -41,6 +42,9 @@ describe('TrackEditor', () => {
 				}),
 			),
 			getTrack: vi.fn(),
+			getTrackImageUrl: vi
+				.fn()
+				.mockImplementation((id: string) => `/api/tracks/${id}/topdown.png`),
 		};
 
 		await TestBed.configureTestingModule({
@@ -164,6 +168,7 @@ describe('TrackEditor', () => {
 		fixture.detectChanges();
 
 		expect(trackApiClient.getTrack).toHaveBeenCalledWith('saved-track');
+		expect(trackApiClient.getTrackImageUrl).toHaveBeenCalledWith('saved-track');
 		expect(component.step()).toBe('annotate');
 		expect(component.name()).toBe('Cloud Track');
 		expect(component.topDown()).toBeTruthy();

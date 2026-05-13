@@ -210,7 +210,9 @@ export class TrackEditor {
 			.subscribe({
 				next: async (response) => {
 					try {
-						const image = await this.loadImage(response.imageUrl);
+						const image = await this.loadImage(
+							this.trackApiClient.getTrackImageUrl(response.track.id),
+						);
 						this.importTrack.set(response.track);
 						this.importTopdownImg.set(image);
 						this.applyImport();
