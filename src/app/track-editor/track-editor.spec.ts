@@ -1,7 +1,7 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TRACK_SCHEMA_VERSION, type TrackDef } from '../track-types';
 import {
 	TrackApiClient,
@@ -22,6 +22,7 @@ const SAVED_TRACK: TrackDef = {
 	zones: [],
 	centerline: [],
 };
+const RealImage = globalThis.Image;
 
 describe('TrackEditor', () => {
 	let component: TrackEditor;
@@ -59,6 +60,10 @@ describe('TrackEditor', () => {
 		component = fixture.componentInstance;
 		await fixture.whenStable();
 		fixture.detectChanges();
+	});
+
+	afterEach(() => {
+		globalThis.Image = RealImage;
 	});
 
 	it('should create', () => {
@@ -155,9 +160,7 @@ describe('TrackEditor', () => {
 				imageUrl: '/api/tracks/saved-track/topdown.png',
 			}),
 		);
-		vi.spyOn(component, 'loadImage').mockResolvedValue(
-			createImage(1600, 900),
-		);
+		globalThis.Image = createMockImageConstructor(1600, 900);
 
 		clickButton(fixture, 'Browse saved tracks');
 		await fixture.whenStable();
@@ -165,6 +168,7 @@ describe('TrackEditor', () => {
 
 		clickButton(fixture, 'Open track');
 		await fixture.whenStable();
+		await new Promise((resolve) => setTimeout(resolve, 0));
 		fixture.detectChanges();
 
 		expect(trackApiClient.getTrack).toHaveBeenCalledWith('saved-track');
@@ -194,17 +198,20 @@ function clickButton(
 	fixture.detectChanges();
 }
 
-function createImage(width: number, height: number): HTMLImageElement {
-	const image = new Image();
-	Object.defineProperty(image, 'naturalWidth', {
-		configurable: true,
-		value: width,
-	});
-	Object.defineProperty(image, 'naturalHeight', {
-		configurable: true,
-		value: height,
-	});
-	image.width = width;
-	image.height = height;
-	return image;
+function createMockImageConstructor(
+	width: number,
+	height: number,
+): typeof Image {
+	return class MockImage {
+		onload: null | (() => void) = null;
+		onerror: null | (() => void) = null;
+		width = width;
+		height = height;
+		naturalWidth = width;
+		naturalHeight = height;
+
+		set src(_value: string) {
+			queueMicrotask(() => this.onload?.());
+		}
+	} as unknown as typeof Image;
 }

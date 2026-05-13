@@ -229,7 +229,7 @@ export class TrackEditor {
 			});
 	}
 
-	loadImage(url: string): Promise<HTMLImageElement> {
+	private loadImage(url: string): Promise<HTMLImageElement> {
 		return new Promise((resolve, reject) => {
 			const image = new Image();
 			image.onload = () => resolve(image);
