@@ -25,6 +25,7 @@ describe('TopdownAnnotator', () => {
 		fixture = TestBed.createComponent(TopdownAnnotator);
 		component = fixture.componentInstance;
 		fixture.componentRef.setInput('topdown', document.createElement('canvas'));
+		component.snapEnabled.set(false);
 		await fixture.whenStable();
 	});
 
@@ -242,6 +243,22 @@ describe('TopdownAnnotator', () => {
 		expect(emitted).toHaveLength(1);
 		expect(emitted[0][0].poly[1]).toEqual([0.5, 0.6]);
 		expect(emitted[0][0].type).toBe('jump');
+	});
+
+	it('updateSelectedVertex: snaps to the grid when snapping is enabled', () => {
+		setCanvasSize();
+		const z1 = makeZone('z1');
+		const emitted: Zone[][] = [];
+		component.zonesOut.subscribe((z) => emitted.push(z));
+		fixture.componentRef.setInput('zonesIn', [z1]);
+		component.selectedZoneId.set('z1');
+		component.selectedVertexIndex.set(1);
+		component.snapEnabled.set(true);
+
+		component['updateSelectedVertex']({ x: 53, y: 67 });
+
+		expect(emitted).toHaveLength(1);
+		expect(emitted[0][0].poly[1]).toEqual([0.56, 0.64]);
 	});
 
 	it('insertVertex: adds a vertex without changing the Zone[] output contract', () => {

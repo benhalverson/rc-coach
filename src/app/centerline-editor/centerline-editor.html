@@ -1,22 +1,71 @@
 <div class="space-y-2">
 	<div class="flex flex-wrap items-center gap-2 text-sm text-neutral-300">
-		<span class="font-medium">Centerline points: {{ lineIn().length }}</span>
+		<span class="font-medium">Centerline points: {{ pointCount() }}</span>
+		<label class="inline-flex items-center gap-1 min-h-[44px] text-xs">
+			<input type="checkbox" [checked]="snapEnabled()" (change)="onSnapToggle($event)" />
+			Snap points
+		</label>
+		<label class="inline-flex items-center gap-1 min-h-[44px] text-xs">
+			<input type="checkbox" [checked]="smoothPreviewEnabled()"
+				(change)="onSmoothPreviewToggleEvent($event)" />
+			Smooth preview
+		</label>
+		@if (smoothPreviewEnabled()) {
+			<label class="inline-flex items-center gap-2 min-h-[44px] text-xs">
+				Samples
+				<input type="range" min="3" max="30" step="1" class="w-24" [value]="smoothPreviewSamples()"
+					(input)="onSmoothPreviewSamplesInput($event)" />
+				<span class="tabular-nums">{{ smoothPreviewSamples() }}</span>
+			</label>
+		}
 		<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 min-h-[44px]"
-			[disabled]="lineIn().length === 0" (click)="undoLast()">
-			Undo last
+			[disabled]="!isUndoAvailable()" (click)="undoChange()">
+			Undo
 		</button>
 		<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 min-h-[44px]"
-			[disabled]="lineIn().length === 0" (click)="clearLine()">
+			[disabled]="!isRedoAvailable()" (click)="redoChange()">
+			Redo
+		</button>
+		<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 min-h-[44px]"
+			[disabled]="pointCount() < 3" (click)="simplifyLine()">
+			Simplify
+		</button>
+		<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-3 py-2 text-xs text-neutral-100 hover:bg-neutral-700 min-h-[44px]"
+			[disabled]="pointCount() === 0" (click)="clearLine()">
 			Clear
 		</button>
 	</div>
+	@if (selectedPoint(); as point) {
+		<div class="rounded border border-neutral-700 bg-neutral-900 p-2 text-xs text-neutral-200 space-y-2">
+			<div class="flex flex-wrap items-center gap-2">
+				<span class="font-medium">Selected point {{ selectedPointIndex()! + 1 }} / {{ pointCount() }}</span>
+				<span class="text-neutral-400 tabular-nums">x: {{ point.x.toFixed(0) }}, y: {{ point.y.toFixed(0) }}</span>
+			</div>
+			<div class="flex flex-wrap items-center gap-2">
+				<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 min-h-[44px]"
+					(click)="selectPrevPoint()">Prev</button>
+				<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 min-h-[44px]"
+					(click)="selectNextPoint()">Next</button>
+				<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 min-h-[44px]"
+					(click)="nudgeSelectedPoint(0, -1)">↑</button>
+				<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 min-h-[44px]"
+					(click)="nudgeSelectedPoint(-1, 0)">←</button>
+				<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 min-h-[44px]"
+					(click)="nudgeSelectedPoint(1, 0)">→</button>
+				<button type="button" class="rounded border border-neutral-600 bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 min-h-[44px]"
+					(click)="nudgeSelectedPoint(0, 1)">↓</button>
+				<button type="button" class="rounded border border-red-700 bg-red-900/30 px-2 py-1 text-xs text-red-300 hover:bg-red-900/50 min-h-[44px]"
+					(click)="deleteSelectedPoint()">Delete point</button>
+			</div>
+		</div>
+	}
 
 	<div class="relative rounded-xl border border-neutral-800 bg-neutral-950">
 		<canvas #canvas class="w-full h-auto touch-none rounded-xl"
 			(pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)"
 			(pointercancel)="onPointerUp($event)"></canvas>
 		<div class="absolute right-3 top-2 rounded bg-neutral-900/90 px-2 py-1 text-xs text-neutral-100">
-			Click to add points. Drag existing points to adjust.
+			Click to add points. Drag to adjust. Selected points are highlighted, and smooth preview uses a dashed path.
 		</div>
 	</div>
 </div>
