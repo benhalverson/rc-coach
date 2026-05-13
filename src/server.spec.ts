@@ -8,15 +8,20 @@ import {
 
 describe('server request handling', () => {
 	it('routes API requests through Hono before Angular SSR', async () => {
-		const angularHandle = vi.fn().mockResolvedValue(new Response('ssr fallback'));
+		const angularHandle = vi
+			.fn()
+			.mockResolvedValue(new Response('ssr fallback'));
 		const handler = createServerHandler({
 			angularApp: { handle: angularHandle },
 			apiApp: createApiApp(),
 		});
 
-		const response = await handler(new Request('https://example.com/api/health'), {
-			TRACKS_DB: {} as D1Database,
-		} satisfies Partial<ServerEnv>);
+		const response = await handler(
+			new Request('https://example.com/api/health'),
+			{
+				TRACKS_DB: {} as D1Database,
+			} satisfies Partial<ServerEnv>,
+		);
 
 		expect(response.status).toBe(200);
 		await expect(response.json()).resolves.toEqual({ ok: true });
@@ -38,13 +43,17 @@ describe('server request handling', () => {
 	});
 
 	it('returns a server error when the D1 binding is missing', async () => {
-		const angularHandle = vi.fn().mockResolvedValue(new Response('ssr fallback'));
+		const angularHandle = vi
+			.fn()
+			.mockResolvedValue(new Response('ssr fallback'));
 		const handler = createServerHandler({
 			angularApp: { handle: angularHandle },
 			apiApp: createApiApp(),
 		});
 
-		const response = await handler(new Request('https://example.com/api/health'));
+		const response = await handler(
+			new Request('https://example.com/api/health'),
+		);
 
 		expect(response.status).toBe(500);
 		await expect(response.json()).resolves.toEqual({

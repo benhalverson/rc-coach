@@ -149,7 +149,6 @@ export function isQuadValid(pts: Pt[], w: number, h: number): boolean {
 	return true;
 }
 
-
 function inBounds(p: Pt, w: number, h: number): boolean {
 	return p.x >= 0 && p.y >= 0 && p.x <= w && p.y <= h;
 }
@@ -191,7 +190,10 @@ export function validateQuadTLTRBRBL(
 	}
 
 	if (!isConvexQuad(pts)) {
-		return { ok: false, reason: 'Quad is self-intersecting or non-convex (bow-tie)' };
+		return {
+			ok: false,
+			reason: 'Quad is self-intersecting or non-convex (bow-tie)',
+		};
 	}
 
 	if (quadArea(pts) < minArea) {

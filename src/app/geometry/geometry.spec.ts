@@ -7,11 +7,11 @@ import {
 	normToPx,
 	orderQuadTLTRBRBL,
 	orderQuadTLTRBRBLv2,
+	type Pt,
 	pxToNorm,
 	quadArea,
 	rectPolyPx,
 	validateQuadTLTRBRBL,
-	type Pt,
 } from './geometry';
 
 const TL: Pt = { x: 100, y: 100 };
@@ -117,11 +117,15 @@ describe('quadArea', () => {
 
 describe('cross', () => {
 	it('returns positive for CCW turn', () => {
-		expect(cross({ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 })).toBeGreaterThan(0);
+		expect(
+			cross({ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }),
+		).toBeGreaterThan(0);
 	});
 
 	it('returns negative for CW turn', () => {
-		expect(cross({ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 0 })).toBeLessThan(0);
+		expect(cross({ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 0 })).toBeLessThan(
+			0,
+		);
 	});
 
 	it('returns 0 for collinear points', () => {
@@ -314,7 +318,9 @@ describe('validateQuadTLTRBRBL', () => {
 			{ x: 110, y: 110 },
 			{ x: 100, y: 110 },
 		];
-		const strict = validateQuadTLTRBRBL(pts, 800, 600, { minPointSeparationPx: 20 });
+		const strict = validateQuadTLTRBRBL(pts, 800, 600, {
+			minPointSeparationPx: 20,
+		});
 		expect(strict.ok).toBe(false);
 
 		const lenient = validateQuadTLTRBRBL(pts, 800, 600, {

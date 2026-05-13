@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/d1';
 import {
-	MISSING_TRACKS_DB_MESSAGE,
 	type D1Database,
+	MISSING_TRACKS_DB_MESSAGE,
 	type ServerEnv,
 } from './server.env';
 import { schema } from './server.schema';

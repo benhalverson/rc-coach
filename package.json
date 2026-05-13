@@ -9,6 +9,7 @@
 		"test": "ng test",
 		"serve:ssr:rc-coach": "node dist/rc-coach/server/server.mjs",
 		"preview": "pnpm run build && wrangler dev",
+		"dev:api": "wrangler dev src/server.local-api.ts --assets public --port 8787 --show-interactive-dev-session=false",
 		"deploy": "pnpm run build && wrangler deploy",
 		"agent": "tsx .sandcastle/main.mts",
 		"cf-typegen": "wrangler types",

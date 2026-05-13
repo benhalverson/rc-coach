@@ -1,5 +1,9 @@
 import { parameterizeCenterline } from '../geometry/centerline-params';
-import { arcLengthRate, frenetToWorld, worldToFrenet } from '../geometry/frenet';
+import {
+	arcLengthRate,
+	frenetToWorld,
+	worldToFrenet,
+} from '../geometry/frenet';
 
 // Five-point horizontal line: avoids heading wrap-around at interior points.
 // Using 4 equal segments so that s=50 is safely in the middle with heading=0.
