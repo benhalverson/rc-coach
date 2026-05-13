@@ -3,13 +3,20 @@ import {
 	ChangeDetectionStrategy,
 	Component,
 	inject,
+	signal,
 	viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { forkJoin, from } from 'rxjs';
 import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
 import { QuadPicker } from '../quad-picker/quad-picker';
+import {
+	TrackApiClient,
+	type TrackApiError,
+	type TrackListItem,
+} from '../state/track-api-client';
 import { type Step, TrackStore } from '../state/track-store';
 import { TopdownAnnotator } from '../topdown-annotator/topdown-annotator';
 import type { Vec2, ZoneType } from '../track-types';
@@ -31,6 +38,7 @@ import type { Vec2, ZoneType } from '../track-types';
 })
 export class TrackEditor {
 	private readonly annotator = viewChild<TopdownAnnotator>('annotator');
+	private readonly trackApi = inject(TrackApiClient);
 	private readonly store = inject(TrackStore);
 
 	readonly STEPS: { id: Step; label: string }[] = [
@@ -85,6 +93,15 @@ export class TrackEditor {
 	readonly importWarnings = this.store.importWarnings;
 	readonly importPngError = this.store.importPngError;
 	readonly importCompatibilityError = this.store.importCompatibilityError;
+	readonly cloudTracks = signal<TrackListItem[]>([]);
+	readonly cloudTracksLoading = signal(false);
+	readonly cloudTracksError = signal<string | null>(null);
+	readonly cloudTrackLoadingId = signal<string | null>(null);
+	readonly cloudTrackLoadError = signal<string | null>(null);
+
+	constructor() {
+		this.refreshCloudTracks();
+	}
 
 	onFile(ev: Event) {
 		this.store.onFile(ev);
@@ -149,6 +166,74 @@ export class TrackEditor {
 
 	applyImport() {
 		this.store.applyImport();
+	}
+
+	refreshCloudTracks() {
+		this.cloudTracksLoading.set(true);
+		this.cloudTracksError.set(null);
+		this.trackApi.listTracks().subscribe({
+			next: (response) => {
+				this.cloudTracks.set(response.items);
+				this.cloudTracksLoading.set(false);
+			},
+			error: (error: TrackApiError) => {
+				this.cloudTracks.set([]);
+				this.cloudTracksError.set(error.message);
+				this.cloudTracksLoading.set(false);
+			},
+		});
+	}
+
+	loadCloudTrack(id: string) {
+		this.cloudTrackLoadingId.set(id);
+		this.cloudTrackLoadError.set(null);
+		forkJoin({
+			trackResponse: this.trackApi.getTrack(id),
+			imageBlob: this.trackApi.getTrackImage(id),
+		})
+			.subscribe({
+				next: ({ trackResponse, imageBlob }) => {
+					void from(this.loadImageBlob(imageBlob)).subscribe({
+						next: (img) => {
+							this.store.importJsonError.set(null);
+							this.store.importWarnings.set([]);
+							this.store.importPngError.set(null);
+							this.store.importTrack.set(trackResponse.track);
+							this.store.importTopdownImg.set(img);
+							this.store.applyImport();
+							this.cloudTrackLoadingId.set(null);
+						},
+						error: (error: Error) => {
+							this.cloudTrackLoadError.set(error.message);
+							this.cloudTrackLoadingId.set(null);
+						},
+					});
+				},
+				error: (error: TrackApiError) => {
+					this.cloudTrackLoadError.set(error.message);
+					this.cloudTrackLoadingId.set(null);
+				},
+			});
+	}
+
+	private loadImageBlob(blob: Blob): Promise<HTMLImageElement> {
+		return new Promise((resolve, reject) => {
+			const url = URL.createObjectURL(blob);
+			const img = new Image();
+			img.onload = () => {
+				URL.revokeObjectURL(url);
+				resolve(img);
+			};
+			img.onerror = () => {
+				URL.revokeObjectURL(url);
+				reject(
+					new Error(
+						'Failed to load the saved top-down image. Please try again.',
+					),
+				);
+			};
+			img.src = url;
+		});
 	}
 }
 // Using store-provided signals; no local Step type needed.

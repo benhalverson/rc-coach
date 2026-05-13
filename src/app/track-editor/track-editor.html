@@ -29,6 +29,57 @@
     <div class="text-neutral-400">Upload a screenshot of your RC track. We'll use it to build a top-down view.</div>
     <input type="file" accept="image/*" (change)="onFile($event)" />
 
+    <div class="mt-4 rounded-xl border border-neutral-800 p-3 space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="text-neutral-400 text-sm font-medium">Or load a saved cloud track</div>
+        <button type="button"
+          class="rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+          [disabled]="cloudTracksLoading()"
+          (click)="refreshCloudTracks()">
+          Refresh saved tracks
+        </button>
+      </div>
+
+      @if (cloudTracksError()) {
+        <div role="alert" class="text-xs text-red-400">{{ cloudTracksError() }}</div>
+      }
+
+      @if (cloudTrackLoadError()) {
+        <div role="alert" class="text-xs text-red-400">{{ cloudTrackLoadError() }}</div>
+      }
+
+      @if (cloudTracksLoading()) {
+        <div class="text-xs text-neutral-500">Loading saved tracks…</div>
+      } @else if (cloudTracks().length === 0) {
+        <div class="text-xs text-neutral-500">No saved cloud tracks available yet.</div>
+      } @else {
+        <div class="grid grid-cols-1 gap-2">
+          @for (track of cloudTracks(); track track.id) {
+            <div class="flex flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-3 md:flex-row md:items-center">
+              <img [src]="track.imageUrl" [alt]="'Preview of ' + track.name"
+                class="h-24 w-full rounded border border-neutral-800 object-cover md:w-40" />
+              <div class="min-w-0 flex-1 space-y-1">
+                <div class="text-sm font-medium text-neutral-100">{{ track.name }}</div>
+                <div class="text-xs text-neutral-400">
+                  {{ track.topdownPx.w }}×{{ track.topdownPx.h }}px
+                  • {{ track.widthMeters.toFixed(2) }}m × {{ track.heightMeters.toFixed(2) }}m
+                </div>
+                <div class="text-xs text-neutral-500">
+                  Updated {{ track.updatedAt | date: 'medium' }}
+                </div>
+              </div>
+              <button type="button"
+                class="rounded border border-cyan-700 bg-cyan-950/40 px-3 py-2 text-sm text-cyan-100 hover:bg-cyan-900/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                [disabled]="cloudTrackLoadingId() !== null"
+                (click)="loadCloudTrack(track.id)">
+                {{ cloudTrackLoadingId() === track.id ? 'Loading…' : 'Load track' }}
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
     <div class="mt-4 rounded-xl border border-neutral-800 p-3 space-y-2">
       <div class="text-neutral-400 text-sm font-medium">Or import an existing session (topdown.png + track.json)</div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
