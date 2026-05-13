@@ -60,12 +60,19 @@ export class TopdownAnnotator {
 
 	onPointerDown(ev: PointerEvent) {
 		ev.preventDefault();
+		const canvas = this.canvasRef().nativeElement;
 		const pt = this.pointerToCanvas(ev);
 		if (!pt) return;
 
 		if (this.drawMode() === 'polygon') {
 			// In polygon mode always add a vertex; never let zone selection interrupt drawing
-			this.polygonPoints.update((pts) => [...pts, pt]);
+			this.polygonPoints.update((pts) => [
+				...pts,
+				{
+					x: clamp(pt.x, 0, canvas.width),
+					y: clamp(pt.y, 0, canvas.height),
+				},
+			]);
 			return;
 		}
 
@@ -73,7 +80,7 @@ export class TopdownAnnotator {
 		if (vertexHit !== null) {
 			this.selectedVertexIndex.set(vertexHit);
 			this.draggingVertex.set(true);
-			this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
+			canvas.setPointerCapture(ev.pointerId);
 			return;
 		}
 
@@ -97,7 +104,7 @@ export class TopdownAnnotator {
 		this.selectedVertexIndex.set(null);
 		this.dragStart.set(pt);
 		this.preview.set(null);
-		this.canvasRef().nativeElement.setPointerCapture(ev.pointerId);
+		canvas.setPointerCapture(ev.pointerId);
 	}
 
 	onPointerMove(ev: PointerEvent) {
