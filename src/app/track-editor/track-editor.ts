@@ -12,10 +12,7 @@ import { CenterlineDemoComponent } from '../centerline-demo/centerline-demo';
 import { CenterlineEditor } from '../centerline-editor/centerline-editor';
 import { type Pt } from '../geometry/geometry';
 import { QuadPicker } from '../quad-picker/quad-picker';
-import {
-	TrackApiClient,
-	type TrackApiError,
-} from '../state/track-api-client';
+import { TrackApiClient, type TrackApiError } from '../state/track-api-client';
 import { type Step, TrackStore } from '../state/track-store';
 import { TopdownAnnotator } from '../topdown-annotator/topdown-annotator';
 import type { Vec2, ZoneType } from '../track-types';
