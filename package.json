@@ -54,7 +54,7 @@
 		"@types/node": "^20.17.19",
 		"drizzle-kit": "^0.31.10",
 		"jsdom": "^27.1.0",
-		"postcss": "^8.5.3",
+		"postcss": "^8.5.18",
 		"tailwindcss": "^4.1.12",
 		"tsx": "^4.21.0",
 		"typescript": "~5.9.2",
