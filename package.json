@@ -33,7 +33,7 @@
 	"packageManager": "pnpm@10.23.0",
 	"dependencies": {
 		"@angular/common": "^21.0.0",
-		"@angular/compiler": "^21.2.4",
+		"@angular/compiler": "^21.2.19",
 		"@angular/core": "^21.2.4",
 		"@angular/forms": "^21.0.0",
 		"@angular/platform-browser": "^21.0.0",
